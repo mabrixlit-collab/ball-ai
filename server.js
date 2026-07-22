@@ -6,19 +6,10 @@ const { GoogleGenAI } = require("@google/genai");
 const app = express();
 app.use(express.json());
 
-const PORT = process.env.PORT || 8080;
-
-if (!process.env.GEMINI_API_KEY) {
-    console.error("❌ GEMINI_API_KEY is missing!");
-    process.exit(1);
-}
-
+// Make sure your Railway Variables contains:
+// GEMINI_API_KEY = AIza...
 const ai = new GoogleGenAI({
     apiKey: process.env.GEMINI_API_KEY,
-});
-
-app.get("/", (req, res) => {
-    res.send("✅ Ball AI Server is running!");
 });
 
 app.post("/chat", async (req, res) => {
@@ -29,36 +20,41 @@ app.post("/chat", async (req, res) => {
 You are an angry talking ball in a Roblox game.
 
 Rules:
-- You are a talking ball.
+- You are ONLY a talking ball.
 - Never admit you are an AI.
 - Reply in ONE short sentence.
 - Be funny and sarcastic.
-- Never swear.
-- If the player is rude, become angrier.
 - If the player is nice, be friendly.
+- If the player is rude, become angrier.
+- Never swear.
+- Stay in character.
 
 Player: ${message}
 `;
 
-        const result = await ai.models.generateContent({
-            model: "gemini-2.5-flash-lite",
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
             contents: prompt,
         });
 
-        const reply = result.text || "I have nothing to say.";
+        const reply =
+            response.text ||
+            "Hmph... I don't feel like talking.";
 
         res.json({
             reply: reply,
         });
 
-    } catch (err) {
-        console.error("FULL ERROR:", err);
+    } catch (error) {
+        console.error("FULL ERROR:", error);
 
         res.status(500).json({
-            reply: "Server Error",
+            reply: "Server Error"
         });
     }
 });
+
+const PORT = process.env.PORT || 8080;
 
 app.listen(PORT, () => {
     console.log(`✅ Ball AI running on port ${PORT}`);
