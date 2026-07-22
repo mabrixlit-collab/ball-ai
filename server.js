@@ -4,10 +4,22 @@ const express = require("express");
 const { GoogleGenAI } = require("@google/genai");
 
 const app = express();
+
 app.use(express.json());
 
+const apiKey = process.env.GEMINI_API_KEY;
+
+if (!apiKey) {
+    console.error("❌ GEMINI_API_KEY is missing!");
+    process.exit(1);
+}
+
 const ai = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY,
+    apiKey: apiKey,
+});
+
+app.get("/", (req, res) => {
+    res.send("✅ Ball AI Server is running!");
 });
 
 app.post("/chat", async (req, res) => {
@@ -35,19 +47,24 @@ Player: ${message}
             contents: prompt,
         });
 
+        console.log("✅ AI replied successfully.");
+
         res.json({
             reply: response.text,
         });
 
     } catch (error) {
+        console.error("❌ FULL ERROR:");
         console.error(error);
 
         res.status(500).json({
-            reply: "..."
+            reply: error.message || "Unknown server error"
         });
     }
 });
 
-app.listen(3000, () => {
-    console.log("✅ Ball AI running on http://localhost:3000");
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+    console.log(`✅ Ball AI running on port ${PORT}`);
 });
