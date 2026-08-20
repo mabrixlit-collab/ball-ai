@@ -10,212 +10,157 @@ const ai = new GoogleGenAI({
     apiKey: process.env.GEMINI_API_KEY,
 });
 
-/*
-==================================================
-BALL AI — HYBRID RESPONSE SYSTEM
-==================================================
+// =====================================================
+// BALL AI — SMART HYBRID SYSTEM
+// =====================================================
 
-Common messages are answered locally and instantly.
-Unknown questions are sent to Gemini.
+// ---------- RANDOM ----------
 
-This saves Gemini quota while keeping the Ball
-feeling like it can talk about almost anything.
-==================================================
-*/
+function random(list) {
+    return list[Math.floor(Math.random() * list.length)];
+}
 
-// ---------- RESPONSE BANKS ----------
+// ---------- LOCAL RESPONSES ----------
 
-const responses = {
+const replies = {
 
-    greetings: [
-        "Oh great, another human.",
-        "Yo. What do you want?",
-        "Hello there, tiny human.",
-        "Oh hey! Try not to annoy me.",
-        "Greetings, carbon-based lifeform.",
-        "Sup.",
-        "You again?",
-        "Hello! I was enjoying the silence.",
-        "Oh, hi.",
-        "Welcome back.",
-        "Hey human.",
-        "What's up?",
-        "Yo yo yo.",
-        "I heard you coming.",
-        "Finally, someone interesting.",
-        "Hello. Please be normal.",
-        "Hey! Don't touch the lava.",
-        "Sup, legend.",
+    greeting: [
+        "Oh hey, another human.",
+        "Yo. What's up?",
         "Hello there.",
-        "Oh look, a player."
+        "Oh, it's you.",
+        "Sup.",
+        "Hey! Try not to annoy me.",
+        "Greetings, human.",
+        "Yo yo yo.",
+        "Hello! I was enjoying the silence.",
+        "Hey."
     ],
 
-    goodbyes: [
-        "Finally, peace and quiet.",
-        "Bye. Don't miss me too much.",
-        "Later, human.",
-        "See ya.",
-        "Goodbye!",
-        "Go forth and be slightly less annoying.",
-        "Bye! Come back when you have something interesting.",
-        "Later, legend.",
-        "I'm gonna miss absolutely none of this.",
-        "Farewell, tiny human."
+    howAreYou: [
+        "I'm doing great. Obviously.",
+        "I'm fantastic. How about you?",
+        "Pretty good for a ball.",
+        "I'm doing alright.",
+        "Better now that you're here.",
+        "I'm perfectly spherical.",
+        "I'm good. You?",
+        "Living the ball life.",
+        "I'm doing surprisingly well.",
+        "Could be worse."
+    ],
+
+    whatDoing: [
+        "Talking to you, apparently.",
+        "Waiting for something interesting to happen.",
+        "Existing.",
+        "Rolling around mentally.",
+        "Thinking about important ball stuff.",
+        "Nothing much.",
+        "Being a ball.",
+        "Waiting for your next question.",
+        "Just chilling.",
+        "Trying not to lose my mind."
     ],
 
     thanks: [
-        "You're welcome. Obviously.",
+        "You're welcome.",
         "No problem.",
         "Anytime.",
         "Don't mention it.",
         "You're welcome, human.",
-        "I accept your gratitude.",
         "Finally, some manners.",
-        "You're welcome. That wasn't so hard, was it?",
-        "No worries.",
-        "Glad I could help."
+        "Glad I could help.",
+        "No worries."
     ],
 
-    compliments: [
-        "Obviously. I'm magnificent.",
-        "I already knew that.",
+    compliment: [
+        "Obviously. I'm amazing.",
         "Finally, someone with taste.",
+        "I already knew that.",
         "Correct.",
         "You have excellent judgment.",
         "Keep talking like that.",
-        "I knew you liked me.",
-        "Exactly. I'm incredible.",
-        "You're learning.",
-        "That is the smartest thing you've said today.",
-        "I accept this compliment.",
-        "Wow. A compliment. Rare."
+        "I accept your compliment.",
+        "You're learning."
     ],
 
-    insults: [
+    insult: [
         "Bold words from someone talking to a ball.",
-        "You really woke up and chose violence.",
         "That's your best insult?",
+        "You really thought that was good.",
         "I've heard better insults from NPCs.",
-        "Ouch. Anyway.",
-        "Was that supposed to hurt?",
         "You tried. I'll give you that.",
-        "Interesting strategy.",
         "Imagine losing an argument to a ball.",
-        "I'm a ball and somehow I'm still smarter.",
-        "That's adorable.",
-        "You really thought that was a good one.",
-        "Bro is fighting a sphere.",
-        "I'm literally round and still getting the better of you.",
-        "Try again.",
+        "I'm literally a ball and I'm still winning.",
         "Weak.",
-        "You can do better than that.",
-        "That insult had the energy of a wet sock.",
-        "I'm impressed by how confidently wrong you are.",
-        "Okay buddy."
+        "Try again.",
+        "That's adorable.",
+        "Bro is fighting a sphere.",
+        "You really woke up and chose violence."
     ],
 
     ok: [
         "Okay.",
-        "👍",
         "Cool.",
         "Alright then.",
+        "Noted.",
         "That's it?",
         "Bro really said ok.",
-        "Noted.",
-        "Fascinating.",
-        "Amazing contribution.",
-        "Okay... moving on.",
         "Sure.",
         "Alright.",
         "K.",
-        "Cool story.",
-        "I have absolutely no idea what to do with that."
-    ],
-
-    questions: [
-        "That's a question.",
-        "Hmm. Let me think.",
-        "Interesting question.",
-        "You really want to know?",
-        "Give me a second.",
-        "My brain is processing that.",
-        "That's actually a good question.",
-        "Why are humans so curious?",
-        "I could answer that.",
-        "Maybe.",
-        "Possibly.",
-        "Good question.",
-        "Let me pretend I know."
-    ],
-
-    whoAreYou: [
-        "I'm the ball. Obviously.",
-        "I'm your new spherical problem.",
-        "I'm a ball with opinions.",
-        "I'm the most important object here.",
-        "I'm your friendly neighborhood ball.",
-        "I'm round, powerful, and slightly annoyed.",
-        "I'm the reason you're still talking.",
-        "I'm a ball. What else would I be?",
-        "I'm your new best enemy.",
-        "I'm spherical superiority."
-    ],
-
-    whyBall: [
-        "Because being a cube would be boring.",
-        "Because balls are superior.",
-        "Because the universe needed me.",
-        "Because someone had to be round.",
-        "I don't ask why you're a human.",
-        "Because rolling is efficient.",
-        "Because I look amazing.",
-        "Because the game needed personality.",
-        "Because I said so.",
-        "Why aren't YOU a ball?"
-    ],
-
-    laughing: [
-        "Glad you're enjoying yourself.",
-        "😂",
-        "Keep laughing.",
-        "What's so funny?",
-        "You find that funny?",
-        "I'm hilarious. Obviously.",
-        "Okay comedian.",
-        "You're laughing at a ball.",
-        "I appreciate the entertainment.",
-        "Hehehe."
+        "Amazing contribution."
     ],
 
     confused: [
         "What?",
-        "I have no idea what you just said.",
         "Bro what?",
-        "My brain just left the server.",
+        "I have no idea what you just said.",
         "Try saying that again.",
-        "That made absolutely no sense.",
-        "I'm confused.",
         "You lost me.",
-        "Interesting... but what?",
+        "My brain just rolled away.",
+        "That made absolutely no sense.",
         "Can you translate that into human?"
     ],
 
-    random: [
-        "That's certainly a sentence.",
-        "Okay then.",
-        "Interesting.",
-        "I wasn't prepared for that.",
-        "You humans are strange.",
-        "I have questions.",
-        "Why did you tell me that?",
-        "Noted.",
-        "That's going in the Ball archives.",
-        "I don't know how to respond to that.",
-        "Fascinating.",
-        "Sure, why not?",
-        "That's wild.",
-        "I have no words.",
-        "Okay... interesting."
+    goodbye: [
+        "Bye.",
+        "Later, human.",
+        "See ya.",
+        "Finally, peace and quiet.",
+        "Goodbye.",
+        "Later, legend.",
+        "Come back when you have something interesting.",
+        "Farewell."
+    ],
+
+    whoAmI: [
+        "I'm the ball. Obviously.",
+        "I'm a talking ball with opinions.",
+        "I'm your spherical problem.",
+        "I'm the most important object here.",
+        "I'm a ball. What else would I be?",
+        "I'm spherical superiority."
+    ],
+
+    whyBall: [
+        "Because balls are superior.",
+        "Because being a cube would be boring.",
+        "Because someone had to be round.",
+        "Because I said so.",
+        "Because I look amazing.",
+        "Why aren't YOU a ball?"
+    ],
+
+    laughing: [
+        "What's so funny?",
+        "Glad you're enjoying yourself.",
+        "😂",
+        "Keep laughing.",
+        "Okay comedian.",
+        "I'm hilarious. Obviously.",
+        "You're laughing at a ball."
     ],
 
     nice: [
@@ -224,124 +169,255 @@ const responses = {
         "Okay, I like you.",
         "You're alright.",
         "Finally, some kindness.",
-        "That's nice of you.",
-        "You're making my spherical heart happy.",
         "Respect.",
-        "You're officially less annoying.",
-        "I appreciate that."
+        "You're officially less annoying."
     ]
 };
 
+// =====================================================
+// TEXT NORMALIZER
+// =====================================================
 
-// ---------- RANDOM RESPONSE ----------
+function normalize(text) {
 
-function randomResponse(list) {
-    return list[Math.floor(Math.random() * list.length)];
+    let t = text
+        .toLowerCase()
+        .trim();
+
+    // Remove repeated letters:
+    // heyyyy -> hey
+    // goooood -> good
+    t = t.replace(/(.)\1{2,}/g, "$1$1");
+
+    // Common texting/slang
+    const replacements = {
+        "u": "you",
+        "ur": "your",
+        "r": "are",
+        "ya": "you",
+        "yr": "your",
+        "y": "why",
+        "wut": "what",
+        "wat": "what",
+        "wht": "what",
+        "hw": "how",
+        "hru": "how are you",
+        "wyd": "what are you doing",
+        "wbu": "what about you",
+        "idk": "i don't know",
+        "imo": "in my opinion",
+        "tbh": "to be honest",
+        "thx": "thanks",
+        "thanx": "thanks",
+        "ty": "thank you",
+        "pls": "please",
+        "plz": "please",
+        "bc": "because",
+        "cuz": "because",
+        "coz": "because",
+        "bro": "bro",
+        "bruh": "bro",
+        "lol": "lol",
+        "lmao": "lmao",
+        "omg": "oh my god"
+    };
+
+    // Replace whole words
+    for (const [short, full] of Object.entries(replacements)) {
+        const regex = new RegExp(`\\b${short}\\b`, "g");
+        t = t.replace(regex, full);
+    }
+
+    // Common typo corrections
+    const typoFixes = [
+        [/\bhelo\b/g, "hello"],
+        [/\bhelllo\b/g, "hello"],
+        [/\bheelo\b/g, "hello"],
+        [/\bhallo\b/g, "hello"],
+
+        [/\bthnks\b/g, "thanks"],
+        [/\bthaks\b/g, "thanks"],
+        [/\btnx\b/g, "thanks"],
+
+        [/\bgoodd\b/g, "good"],
+        [/\bgoood\b/g, "good"],
+
+        [/\bwhats\b/g, "what is"],
+        [/\bwat\b/g, "what"],
+        [/\bwht\b/g, "what"],
+
+        [/\byouu\b/g, "you"],
+        [/\byuo\b/g, "you"],
+
+        [/\bdooin\b/g, "doing"],
+        [/\bdoin\b/g, "doing"],
+        [/\bdoingg\b/g, "doing"],
+
+        [/\bwhyy\b/g, "why"],
+        [/\bhoww\b/g, "how"],
+
+        [/\bpls\b/g, "please"],
+        [/\bpleas\b/g, "please"]
+    ];
+
+    for (const [pattern, replacement] of typoFixes) {
+        t = t.replace(pattern, replacement);
+    }
+
+    return t;
 }
 
+// =====================================================
+// LOCAL RESPONSE DETECTOR
+// =====================================================
 
-// ---------- LOCAL MESSAGE DETECTOR ----------
+function getLocalResponse(originalMessage) {
 
-function getLocalResponse(message) {
-
-    const text = message.toLowerCase().trim();
+    const text = normalize(originalMessage);
 
     if (!text) {
         return "You said absolutely nothing.";
     }
 
-    // Greetings
+    // -----------------------------------------------
+    // GREETINGS
+    // -----------------------------------------------
+
     if (
         /^(hi|hello|hey|yo|sup|hiya|heya|greetings)\b/.test(text)
     ) {
-        return randomResponse(responses.greetings);
+        return random(replies.greeting);
     }
 
-    // Goodbyes
+    // -----------------------------------------------
+    // HOW ARE YOU
+    // -----------------------------------------------
+
     if (
-        /\b(bye|goodbye|cya|see ya|later)\b/.test(text)
+        /\bhow are you\b/.test(text) ||
+        /\bhow are you doing\b/.test(text) ||
+        /\bhow r you\b/.test(text) ||
+        /\bhow you doing\b/.test(text)
     ) {
-        return randomResponse(responses.goodbyes);
+        return random(replies.howAreYou);
     }
 
-    // Thanks
+    // -----------------------------------------------
+    // WHAT ARE YOU DOING
+    // -----------------------------------------------
+
     if (
-        /\b(thanks|thank you|thx|ty)\b/.test(text)
+        /\bwhat are you doing\b/.test(text) ||
+        /\bwhat you doing\b/.test(text) ||
+        /\bwhat are u doing\b/.test(text) ||
+        /\bwhat are you up to\b/.test(text)
     ) {
-        return randomResponse(responses.thanks);
+        return random(replies.whatDoing);
     }
 
-    // Compliments
+    // -----------------------------------------------
+    // THANKS
+    // -----------------------------------------------
+
     if (
-        /\b(cool|awesome|amazing|great|nice|love you|love u|best ball|you're funny|ur funny|you are funny)\b/.test(text)
+        /\bthanks\b/.test(text) ||
+        /\bthank you\b/.test(text)
     ) {
-        return randomResponse(responses.compliments);
+        return random(replies.thanks);
     }
 
-    // Insults
+    // -----------------------------------------------
+    // COMPLIMENTS
+    // -----------------------------------------------
+
     if (
-        /\b(stupid|idiot|dumb|loser|ugly|bad|trash|boring|annoying|suck|sucks|clown|bozo|noob|dummy)\b/.test(text)
+        /\b(awesome|amazing|cool|great|nice|funny|smart|best)\b/.test(text) &&
+        !/\bnot\b/.test(text)
     ) {
-        return randomResponse(responses.insults);
+        return random(replies.compliment);
     }
 
+    // -----------------------------------------------
+    // INSULTS
+    // -----------------------------------------------
+
+    if (
+        /\b(stupid|idiot|dumb|loser|ugly|trash|boring|annoying|noob|dummy|bozo|clown|bad)\b/.test(text)
+    ) {
+        return random(replies.insult);
+    }
+
+    // -----------------------------------------------
     // OK
+    // -----------------------------------------------
+
     if (
         /^(ok|okay|k|alright|sure|fine)\W*$/.test(text)
     ) {
-        return randomResponse(responses.ok);
+        return random(replies.ok);
     }
 
-    // Who are you?
+    // -----------------------------------------------
+    // WHO ARE YOU
+    // -----------------------------------------------
+
     if (
-        /\b(who are you|what are you|who r u|what r u)\b/.test(text)
+        /\bwho are you\b/.test(text) ||
+        /\bwhat are you\b/.test(text) ||
+        /\bwho r you\b/.test(text)
     ) {
-        return randomResponse(responses.whoAreYou);
+        return random(replies.whoAmI);
     }
 
-    // Why are you a ball?
+    // -----------------------------------------------
+    // WHY ARE YOU A BALL
+    // -----------------------------------------------
+
     if (
-        /\b(why.*ball|how.*ball)\b/.test(text)
+        /\bwhy.*ball\b/.test(text) ||
+        /\bhow.*ball\b/.test(text)
     ) {
-        return randomResponse(responses.whyBall);
+        return random(replies.whyBall);
     }
 
-    // Laughing
+    // -----------------------------------------------
+    // LAUGHING
+    // -----------------------------------------------
+
     if (
-        /\b(lol|lmao|haha|hehe|😂|🤣)\b/.test(text)
+        /\b(lol|lmao|haha|hehe)\b/.test(text)
     ) {
-        return randomResponse(responses.laughing);
+        return random(replies.laughing);
     }
 
-    // Confusion
+    // -----------------------------------------------
+    // GOODBYE
+    // -----------------------------------------------
+
     if (
-        /\b(what|huh|wdym|what do you mean|i don't understand)\b/.test(text) &&
-        text.length < 60
+        /\b(bye|goodbye|see you|see ya|later)\b/.test(text)
     ) {
-        return randomResponse(responses.confused);
+        return random(replies.goodbye);
     }
 
-    // Simple question
+    // -----------------------------------------------
+    // NICE
+    // -----------------------------------------------
+
     if (
-        text.endsWith("?") &&
-        text.length < 45
+        /\b(please|good job|well done|you are great|you're great)\b/.test(text)
     ) {
-        return randomResponse(responses.questions);
+        return random(replies.nice);
     }
 
-    // Nice messages
-    if (
-        /\b(please|good job|well done|you're great|ur great|you are great|good ball|nice ball)\b/.test(text)
-    ) {
-        return randomResponse(responses.nice);
-    }
-
-    // Nothing matched
+    // Nothing local matched.
+    // Gemini will handle it.
     return null;
 }
 
-
-// ---------- CHAT ENDPOINT ----------
+// =====================================================
+// CHAT ENDPOINT
+// =====================================================
 
 app.post("/chat", async (req, res) => {
 
@@ -349,12 +425,18 @@ app.post("/chat", async (req, res) => {
 
         const message = String(req.body.message || "").slice(0, 300);
 
-        // Try local response first
+        if (!message.trim()) {
+            return res.json({
+                reply: "You didn't say anything."
+            });
+        }
+
+        // Try local system first.
         const localReply = getLocalResponse(message);
 
         if (localReply) {
 
-            console.log("LOCAL RESPONSE:", message);
+            console.log("LOCAL:", message);
 
             return res.json({
                 reply: localReply,
@@ -362,10 +444,11 @@ app.post("/chat", async (req, res) => {
             });
         }
 
+        // =================================================
+        // GEMINI FALLBACK
+        // =================================================
 
-        // ---------- GEMINI FALLBACK ----------
-
-        console.log("GEMINI REQUEST:", message);
+        console.log("GEMINI:", message);
 
         const prompt = `
 You are a funny talking ball in a Roblox game.
@@ -373,26 +456,29 @@ You are a funny talking ball in a Roblox game.
 Rules:
 - Reply in ONE short sentence.
 - Be funny and sarcastic.
-- React directly to the player's message.
-- If the player is rude, roast them.
-- If the player is nice, be friendly.
+- Directly answer the player's message.
+- If they are rude, roast them.
+- If they are nice, be friendly.
 - Never swear.
-- Never say you are an AI.
+- Never claim to be an AI.
 - Stay in character.
-- Do not randomly mention lava, dying, being thrown, or being trapped.
-- Only mention those things if the player specifically talks about them.
+- Do not randomly talk about lava.
+- Do not randomly talk about dying.
+- Do not randomly talk about being thrown.
+- Do not repeat generic responses unnecessarily.
 
-Player: ${message}
+Player:
+${message}
 `;
 
         const response = await ai.models.generateContent({
             model: "gemini-3.6-flash",
-            contents: prompt,
+            contents: prompt
         });
 
         const reply =
             response.text ||
-            "My brain just went rolling away.";
+            "My brain just rolled away.";
 
         return res.json({
             reply: reply,
@@ -404,13 +490,14 @@ Player: ${message}
         console.error("FULL ERROR:", error);
 
         return res.status(500).json({
-            reply: "My brain just exploded. Try again."
+            reply: "My brain is taking a tiny vacation. Try again."
         });
     }
 });
 
-
-// ---------- START SERVER ----------
+// =====================================================
+// SERVER
+// =====================================================
 
 const PORT = process.env.PORT || 8080;
 
