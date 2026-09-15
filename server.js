@@ -1,77 +1,121 @@
-require("dotenv").config();
+export default {
+    async fetch(request, env) {
 
-const express = require("express");
-const Groq = require("groq-sdk");
+        // Health check
+        if (request.method === "GET") {
+            return new Response("Ball AI is online!");
+        }
 
-const app = express();
-app.use(express.json());
-
-const groq = new Groq({
-    apiKey: process.env.GROQ_API_KEY
-});
-
-app.post("/chat", async (req, res) => {
-    try {
-        const message = String(req.body.message || "").slice(0, 300);
-
-        if (!message.trim()) {
-            return res.json({
-                reply: "You didn't say anything."
+        // Only accept POST requests
+        if (request.method !== "POST") {
+            return new Response("Method not allowed", {
+                status: 405
             });
         }
 
-        const completion = await groq.chat.completions.create({
-            model: "llama-3.1-8b-instant",
-            messages: [
-                {
-                    role: "system",
-                    content: `
-You are a funny, sarcastic talking ball in a Roblox game.
+        try {
 
-Rules:
-- Stay in character as the Ball.
-- Reply in ONE short sentence.
-- Be funny and conversational.
-- If the player is rude, roast them back.
+            const body = await request.json();
+
+            const message = String(body.message || "").slice(0, 300);
+
+            if (!message.trim()) {
+                return Response.json({
+                    reply: "You didn't say anything."
+                });
+            }
+
+            console.log("PLAYER:", message);
+
+            const groqResponse = await fetch(
+                "https://api.groq.com/openai/v1/chat/completions",
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${env.GROQ_API_KEY}`
+                    },
+
+                    body: JSON.stringify({
+                        model: "openai/gpt-oss-20b",
+
+                        messages: [
+                            {
+                                role: "system",
+                                content: `
+You are a funny, sarcastic talking ball inside a Roblox game.
+
+PERSONALITY:
+- You are confident, funny and slightly sarcastic.
+- Talk like a real Roblox player.
+- You can roast the player when they are rude.
 - If the player is nice, be friendly.
+- Sometimes make clever jokes.
+- Do not sound like a formal assistant.
+
+RULES:
+- Reply in ONE short sentence.
+- Answer what the player actually asked.
 - Never swear.
+- Never use inappropriate language.
 - Never say you are an AI.
-- Answer the player's actual question.
-- Do not randomly mention lava, dying, being thrown, or being trapped.
-- Do not repeat the same response unnecessarily.
+- Never say you are powered by AI.
+- Never randomly mention lava.
+- Never randomly mention dying.
+- Never randomly mention being thrown.
+- Never randomly mention being trapped.
+- Only mention those things if the player specifically brings them up.
+- Understand typos, slang and shortened words when possible.
+- If the player asks a normal question, actually answer it.
 `
-                },
-                {
-                    role: "user",
-                    content: message
+                            },
+                            {
+                                role: "user",
+                                content: message
+                            }
+                        ],
+
+                        temperature: 0.8,
+                        max_tokens: 80
+                    })
                 }
-            ],
-            temperature: 0.8,
-            max_tokens: 80
-        });
+            );
 
-        const reply =
-            completion.choices?.[0]?.message?.content ||
-            "My brain just rolled away.";
+            if (!groqResponse.ok) {
 
-        console.log("PLAYER:", message);
-        console.log("BALL:", reply);
+                const errorText = await groqResponse.text();
 
-        res.json({
-            reply: reply
-        });
+                console.log("GROQ ERROR:", errorText);
 
-    } catch (error) {
-        console.error("FULL ERROR:", error);
+                return Response.json({
+                    reply: "My brain just glitched. Try again."
+                }, {
+                    status: 500
+                });
+            }
 
-        res.status(500).json({
-            reply: "My brain is taking a tiny vacation. Try again."
-        });
+            const data = await groqResponse.json();
+
+            const reply =
+                data.choices?.[0]?.message?.content?.trim() ||
+                "My brain just rolled away.";
+
+            console.log("BALL:", reply);
+
+            return Response.json({
+                reply: reply
+            });
+
+        } catch (error) {
+
+            console.log("WORKER ERROR:", error);
+
+            return Response.json({
+                reply: "My brain just glitched. Try again."
+            }, {
+                status: 500
+            });
+        }
     }
-});
-
-const PORT = process.env.PORT || 8080;
-
-app.listen(PORT, () => {
-    console.log(`✅ Ball AI running on port ${PORT}`);
-});
+};
