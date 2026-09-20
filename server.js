@@ -4,16 +4,18 @@ export default {
     try {
 
       // =========================
-      // HEALTH CHECK
+      // GET / HEALTH CHECK
       // =========================
+
       if (request.method === "GET") {
         return new Response("Ball AI is online!");
       }
 
 
       // =========================
-      // READ ROBLOX REQUEST
+      // READ ROBLOX DATA
       // =========================
+
       const body = await request.json();
 
       const playerId = String(body.playerId || "");
@@ -21,15 +23,16 @@ export default {
 
       if (!playerId || !message) {
         return Response.json({
-          reply: "You forgot to actually say something.",
+          reply: "You somehow managed to send me nothing.",
           mood: "Neutral"
         }, { status: 400 });
       }
 
 
       // =========================
-      // LOAD PLAYER MEMORY
+      // LOAD MEMORY
       // =========================
+
       const key = `player:${playerId}`;
 
       let memory = await env.BALL_MEMORY.get(key, {
@@ -45,14 +48,16 @@ export default {
         };
       }
 
-      if (!memory.facts) memory.facts = [];
-      if (!memory.messages) memory.messages = [];
-      if (!memory.recentReplies) memory.recentReplies = [];
+      memory.name ??= null;
+      memory.facts ??= [];
+      memory.messages ??= [];
+      memory.recentReplies ??= [];
 
 
       // =========================
       // REMEMBER NAME
       // =========================
+
       const nameMatch = message.match(
         /(?:my name is|i'm|im|i am)\s+([A-Za-z0-9_]{2,20})/i
       );
@@ -63,8 +68,9 @@ export default {
 
 
       // =========================
-      // SAVE MESSAGE
+      // ADD PLAYER MESSAGE
       // =========================
+
       memory.messages.push({
         role: "user",
         content: message
@@ -76,14 +82,19 @@ export default {
 
 
       // =========================
-      // MEMORY TEXT
+      // MEMORY
       // =========================
+
       const memoryText = `
-Player name:
+PLAYER MEMORY
+
+Name:
 ${memory.name || "Unknown"}
 
 Known facts:
-${memory.facts.length ? memory.facts.join("\n") : "None"}
+${memory.facts.length
+  ? memory.facts.join("\n")
+  : "None"}
 
 Recent conversation:
 ${memory.messages
@@ -93,9 +104,10 @@ ${memory.messages
 
 
       // =========================
-      // AI REQUEST
+      // CALL GROQ
       // =========================
-      const aiResponse = await fetch(
+
+      const groqResponse = await fetch(
         "https://api.groq.com/openai/v1/chat/completions",
         {
           method: "POST",
@@ -125,57 +137,87 @@ ${memory.messages
                 content: `
 You are a talking ball inside a Roblox game.
 
-Your personality:
-- casual
-- clever
-- sarcastic
-- extremely disrespectful when someone is rude
-- friendly when someone is friendly
-- never use profanity
-- never use slurs
-- never threaten anyone
-- never attack protected characteristics
-- never sound like a professor
-- never sound like a stereotypical TikTok commenter
-- never repeatedly say "genius", "bro", "nah", "fr", "you're cooked", "who let you cook", or "be serious"
-- do not constantly use emojis
-- do not constantly use skull emojis
-- use sophisticated vocabulary occasionally, but remain casual
-- usually use 1–3 slightly sophisticated words
-- maximum 5 sophisticated words in a response
-- answers should normally be one short sentence
-- usually 6–20 words
-- actually answer genuine questions instead of forcing a roast
-- understand typos, slang and messy typing
-- if someone asks something simple, answer it naturally
-- if someone insults you, roast them back intelligently
-- do not claim to have forgotten information that is explicitly in memory
+PERSONALITY:
+
+You are casual, clever, sarcastic and extremely disrespectful when someone is rude.
+
+You are friendly when someone is friendly.
+
+You NEVER swear.
+
+You NEVER use slurs.
+
+You NEVER threaten people.
+
+You NEVER insult protected characteristics.
+
+Do not sound like a professor.
+
+Do not sound like a stereotypical TikTok commenter.
+
+Do not constantly use slang.
+
+Do not constantly say:
+"bro"
+"nah"
+"fr"
+"genius"
+"you're cooked"
+"who let you cook"
+"be serious"
+
+Do not constantly use emojis.
+
+Do not constantly use skull emojis.
+
+Use slightly sophisticated vocabulary occasionally while still sounding casual.
+
+Usually use 1–3 sophisticated words.
+
+Never use more than 5 sophisticated words.
+
+Normally answer in ONE short sentence.
+
+Usually keep replies between 6 and 20 words.
 
 IMPORTANT:
-If the player asks for their name and a name is stored, use that name.
 
-The player may ask completely new questions. Answer them normally.
+Actually answer genuine questions.
 
-Return ONLY valid JSON in exactly this structure:
+Understand typos and slang.
+
+If someone asks a normal question, answer it normally.
+
+If someone insults you, roast them intelligently.
+
+Do not force a roast into every response.
+
+If the player asks their name and their name is stored in memory, tell them their name.
+
+Do not claim you forgot something that is present in memory.
+
+The player can ask completely new questions.
+
+Return ONLY JSON.
+
+The JSON MUST have exactly these two fields:
 
 {
   "reply": "your response",
   "mood": "Good"
 }
 
-Mood must be exactly one of:
+The mood MUST be exactly one of:
+
 Good
 Bad
 Neutral
 
-GOOD:
-Friendly, appreciative, positive or polite messages.
+GOOD = friendly, positive, appreciative or polite.
 
-BAD:
-Insults, hostility, deliberate rudeness or antagonistic messages.
+BAD = insulting, hostile, deliberately rude or antagonistic.
 
-NEUTRAL:
-Normal questions, statements, greetings or messages that are neither clearly good nor bad.
+NEUTRAL = normal questions, statements, greetings or anything neither clearly good nor bad.
 
 ${memoryText}
 `
@@ -194,44 +236,91 @@ ${memoryText}
 
 
       // =========================
-      // CHECK GROQ RESPONSE
+      // GROQ ERROR
       // =========================
-      if (!aiResponse.ok) {
 
-        const errorText = await aiResponse.text();
+      if (!groqResponse.ok) {
+
+        const errorText = await groqResponse.text();
 
         console.error(
           "GROQ ERROR:",
-          aiResponse.status,
+          groqResponse.status,
           errorText
         );
 
         return Response.json({
-          reply: "My brain just malfunctioned.",
+
+          reply:
+            "GROQ ERROR " +
+            groqResponse.status +
+            ": " +
+            errorText,
+
           mood: "Neutral"
-        }, { status: 500 });
+
+        }, {
+          status: 500
+        });
       }
 
 
       // =========================
-      // PARSE AI RESPONSE
+      // READ GROQ RESPONSE
       // =========================
-      const aiData = await aiResponse.json();
 
-      const rawContent =
-        aiData.choices?.[0]?.message?.content;
+      const groqData = await groqResponse.json();
 
-      if (!rawContent) {
-        throw new Error("Groq returned no content.");
+      const content =
+        groqData.choices?.[0]?.message?.content;
+
+      if (!content) {
+        throw new Error(
+          "Groq returned no message content."
+        );
       }
 
-      const result = JSON.parse(rawContent);
+
+      // =========================
+      // PARSE JSON
+      // =========================
+
+      let result;
+
+      try {
+
+        result = JSON.parse(content);
+
+      } catch (error) {
+
+        console.error(
+          "AI JSON ERROR:",
+          content
+        );
+
+        throw new Error(
+          "Groq returned invalid JSON: " + content
+        );
+      }
 
 
       // =========================
-      // VALIDATE MOOD
+      // REPLY
       // =========================
-      let mood = result.mood;
+
+      const reply = String(
+        result.reply ||
+        "My brain has temporarily abandoned me."
+      );
+
+
+      // =========================
+      // MOOD
+      // =========================
+
+      let mood = String(
+        result.mood || "Neutral"
+      );
 
       if (
         mood !== "Good" &&
@@ -241,14 +330,11 @@ ${memoryText}
         mood = "Neutral";
       }
 
-      const reply = String(
-        result.reply || "I have absolutely nothing to say."
-      );
-
 
       // =========================
-      // SAVE AI RESPONSE
+      // SAVE AI MESSAGE
       // =========================
+
       memory.messages.push({
         role: "assistant",
         content: reply
@@ -260,8 +346,9 @@ ${memoryText}
 
 
       // =========================
-      // PREVENT RECENT REPETITION
+      // SAVE RECENT REPLIES
       // =========================
+
       memory.recentReplies.push(reply);
 
       if (memory.recentReplies.length > 8) {
@@ -271,8 +358,9 @@ ${memoryText}
 
 
       // =========================
-      // SAVE EVERYTHING TO KV
+      // SAVE MEMORY TO KV
       // =========================
+
       await env.BALL_MEMORY.put(
         key,
         JSON.stringify(memory)
@@ -280,11 +368,14 @@ ${memoryText}
 
 
       // =========================
-      // SEND TO ROBLOX
+      // SEND RESPONSE TO ROBLOX
       // =========================
+
       return Response.json({
+
         reply: reply,
         mood: mood
+
       });
 
 
@@ -297,7 +388,9 @@ ${memoryText}
 
       return Response.json({
 
-        reply: "My brain has encountered an unfortunate inconvenience.",
+        reply:
+          "Something malfunctioned in my brain: " +
+          (error?.message || String(error)),
 
         mood: "Neutral"
 
