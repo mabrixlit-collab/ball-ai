@@ -70,8 +70,8 @@ export default {
         content: message
       });
 
-      if (memory.messages.length > 12) {
-        memory.messages = memory.messages.slice(-12);
+      if (memory.messages.length > 5000) {
+        memory.messages = memory.messages.slice(-5000);
       }
 
 
