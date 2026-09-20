@@ -1,0 +1,13 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "ball-ai",
+  "main": "server.js",
+  "compatibility_date": "2026-09-20",
+
+  "kv_namespaces": [
+    {
+      "binding": "BALL_MEMORY",
+      "id": "f63214c1501c49a8898b469b6dd3ac4f"
+    }
+  ]
+}
