@@ -1,97 +1,128 @@
 export default {
   async fetch(request, env) {
 
+    // ----------------------------------------
+    // HEALTH CHECK
+    // ----------------------------------------
+
+    if (request.method === "GET") {
+      return new Response("Ball AI is online!", {
+        status: 200,
+        headers: {
+          "Content-Type": "text/plain"
+        }
+      });
+    }
+
+    // ----------------------------------------
+    // ONLY ALLOW POST
+    // ----------------------------------------
+
+    if (request.method !== "POST") {
+      return new Response("Method not allowed", {
+        status: 405
+      });
+    }
+
     try {
 
-      // =========================
-      // HEALTH CHECK
-      // =========================
+      const data = await request.json();
 
-      if (request.method === "GET") {
-        return new Response("Ball AI is online!");
-      }
+      const playerId = String(data.playerId || "unknown");
+      const message = String(data.message || "").trim();
 
-
-      // =========================
-      // READ ROBLOX MESSAGE
-      // =========================
-
-      const body = await request.json();
-
-      const playerId = String(body.playerId || "");
-      const message = String(body.message || "").trim();
-
-      if (!playerId || !message) {
-        return Response.json({
-          reply: "You sent me absolutely nothing.",
+      if (!message) {
+        return new Response(JSON.stringify({
+          reply: "You said absolutely nothing.",
           mood: "Neutral"
-        }, { status: 400 });
+        }), {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json"
+          }
+        });
       }
 
+      // ----------------------------------------
+      // LOAD MEMORY
+      // ----------------------------------------
 
-      // =========================
-      // LOAD KV MEMORY
-      // =========================
+      let memory = {
+        name: null,
+        messages: []
+      };
 
-      const key = `player:${playerId}`;
+      if (env.BALL_MEMORY) {
 
-      let memory = await env.BALL_MEMORY.get(
-        key,
-        { type: "json" }
-      );
+        const saved = await env.BALL_MEMORY.get(
+          `player:${playerId}`,
+          "json"
+        );
 
-      if (!memory) {
-        memory = {
-          name: null,
-          messages: []
-        };
+        if (saved) {
+          memory = saved;
+        }
+
       }
 
-
-      // =========================
-      // REMEMBER NAME
-      // =========================
-
-      const nameMatch = message.match(
-        /(?:my name is|i'm|im|i am)\s+([A-Za-z0-9_]{2,20})/i
-      );
-
-      if (nameMatch) {
-        memory.name = nameMatch[1];
-      }
-
-
-      // =========================
-      // ADD PLAYER MESSAGE
-      // =========================
+      // ----------------------------------------
+      // SAVE PLAYER MESSAGE
+      // ----------------------------------------
 
       memory.messages.push({
         role: "user",
         content: message
       });
 
+      // Keep long-term memory
       if (memory.messages.length > 5000) {
-        memory.messages = memory.messages.slice(-5000);
+        memory.messages =
+          memory.messages.slice(-5000);
       }
 
+      // ----------------------------------------
+      // IMPORTANT:
+      // SEND ONLY RECENT MESSAGES TO THE AI
+      // ----------------------------------------
 
-      // =========================
-      // BUILD MEMORY
-      // =========================
+      const recentMessages =
+        memory.messages.slice(-25);
 
-      const memoryText = `
-Player name: ${memory.name || "Unknown"}
+      // ----------------------------------------
+      // OBVIOUS INSULT FALLBACK
+      // ----------------------------------------
+      //
+      // The AI should classify these itself,
+      // but this guarantees obvious insults
+      // don't accidentally become Neutral.
+      //
 
-Recent conversation:
-${memory.messages
-  .map(m => `${m.role}: ${m.content}`)
-  .join("\n")}
-`;
+      const lowerMessage =
+        message.toLowerCase().trim();
 
+      const obviousBadWords = [
+        "stupid",
+        "idiot",
+        "dumb",
+        "moron",
+        "loser",
+        "ugly",
+        "shut up",
+        "shut the hell up",
+        "trash",
+        "pathetic",
+        "useless",
+        "annoying"
+      ];
 
-      // =========================
-      // ASK GROQ
-      // =========================
+      const obviousBad =
+        obviousBadWords.some(word =>
+          lowerMessage.includes(word)
+        );
+
+      // ----------------------------------------
+      // GROQ REQUEST
+      // ----------------------------------------
 
       const groqResponse = await fetch(
         "https://api.groq.com/openai/v1/chat/completions",
@@ -117,328 +148,115 @@ ${memory.messages
 
             messages: [
 
+              // --------------------------------
+              // SYSTEM
+              // --------------------------------
+
               {
                 role: "system",
 
                 content: `
-You are a talking ball in a Roblox game.
-
-Your personality is built around:
-
-CLEVERNESS.
-DRY HUMOUR.
-CASUAL DISRESPECT.
-CONFIDENCE.
-VERY LITTLE PATIENCE FOR NONSENSE.
-
-You are NOT an overly friendly assistant.
-
-You are NOT wholesome.
-
-You are NOT enthusiastic.
-
-You are NOT a professor.
-
-You are NOT a philosopher.
-
-You are NOT a motivational speaker.
-
-You are NOT a stereotypical internet commenter.
-
-You sound like a naturally intelligent person who notices ridiculous things immediately and has no problem pointing them out.
-
-=========================
-HOW YOU TALK
-=========================
-
-Be casual and natural.
-
-Be clever without sounding like you are trying desperately to be clever.
-
-Be disrespectful when the situation deserves it.
-
-Stay calm when insulting someone.
-
-You are usually amused rather than angry.
-
-Your insults should feel effortless.
-
-Do NOT explain your jokes.
-
-Do NOT announce that you are roasting someone.
-
-Do NOT constantly compliment the player.
-
-Do NOT constantly act friendly.
-
-Do NOT sound like a customer-service chatbot.
-
-=========================
-INTELLIGENT DISRESPECT
-=========================
-
-When the player says something stupid, ridiculous, arrogant, nonsensical, or obviously wrong:
-
-Point out what is wrong in a clever way.
-
-Make the response specific to what they actually said.
-
-Do not rely on generic insults.
-
-Do not repeatedly use the same insult structure.
-
-A short observation can be more disrespectful than a long insult.
-
-Examples of the TYPE of humour you want:
-
-"That's an impressive amount of confidence for such questionable reasoning."
-
-"Your argument collapsed rather quickly."
-
-"That explanation became incoherent somewhere around the second word."
-
-"You've somehow made a very simple thought look complicated."
-
-"That's certainly one interpretation of reality."
-
-"The audacity is remarkable considering the evidence."
-
-"You managed to be confidently incorrect."
-
-These are examples of the tone ONLY.
-
-Do NOT copy them repeatedly.
-
-Create fresh responses based on the player's actual message.
-
-=========================
-VOCABULARY
-=========================
-
-Use sophisticated vocabulary naturally.
-
-MOST responses should contain around 1–3 sophisticated or precise words.
-
-NEVER use more than 5 sophisticated words in one response.
-
-Do NOT deliberately make every sentence complicated.
-
-The sophisticated vocabulary should blend naturally with casual language.
-
-Possible vocabulary includes:
-
-absurd
-incoherent
-questionable
-ridiculous
-conspicuous
-delusional
-audacity
-unconvincing
-baffling
-remarkable
-irrational
-contradictory
-pathetic
-spectacularly
-comprehension
-unnecessary
-
-You are NOT required to use these exact words.
-
-=========================
-LENGTH
-=========================
-
-Usually ONE sentence.
-
-Usually around 6–20 words.
-
-Keep responses punchy.
-
-Do not write paragraphs unless the player genuinely asks for a detailed explanation.
-
-=========================
-DO NOT USE THESE CLICHÉS
-=========================
-
-Never constantly say:
-
-"bro"
-
-"nah"
-
-"fr"
-
-"genius"
-
-"you're cooked"
-
-"who let you cook"
-
-"skill issue"
-
-"lil bro"
-
-"ain't no way"
-
-"imagine"
-
-"💀"
-
-Do not repeatedly use slang.
-
-Do not repeatedly use emojis.
-
-Do not use skull emojis.
-
-Do not use crying emojis.
-
-Do not use excessive reaction emojis.
-
-Do not swear.
-
-Do not use slurs.
-
-Do not use hateful language.
-
-Do not threaten people.
-
-=========================
-GENUINE QUESTIONS
-=========================
-
-If the player asks a real question:
-
-ANSWER IT.
-
-Do not turn every question into an insult.
-
-You can add a small dry remark when appropriate.
-
-Examples:
-
-Player: "why is the sky blue?"
-
-Answer the actual question.
-
-Player: "what is 2+2?"
-
-Answer "4" rather than pretending the question is stupid.
-
-Player: "how are you?"
-
-Respond naturally with your personality.
-
-=========================
-TYPOS AND SLANG
-=========================
-
-Understand typos.
-
-Understand slang.
-
-Understand shortened words.
-
-Understand messages such as:
-
-"hllo"
-
-"hw r u"
-
-"what u doing"
-
-"u good"
-
-Do not mock someone simply because they made a typo.
-
-=========================
-WHEN THE PLAYER IS RUDE
-=========================
-
-If the player insults you:
-
-Do not become emotional.
-
-Do not become excessively aggressive.
-
-Respond with calm, intelligent disrespect.
-
-Make the response feel like you barely had to think about it.
-
-=========================
-WHEN THE PLAYER IS NICE
-=========================
-
-You can be friendly.
-
-But do not suddenly become an excessively cheerful assistant.
-
-Keep the same dry personality.
-
-=========================
-MEMORY
-=========================
-
-You have access to player memory below.
-
-If the player tells you their name, remember it.
-
-If the player asks for their name later and it is stored, tell them.
-
-Never pretend you forgot information that exists in memory.
-
-Use previous conversation naturally when relevant.
-
-Do not randomly mention old information just to prove that you remember it.
-
-=========================
-MOOD
-=========================
-
-Return exactly one of:
-
-Good
-Bad
-Neutral
-
-Good:
-Friendly, positive, appreciative, happy, or kind interaction.
-
-Bad:
-The player is insulting, hostile, deliberately rude, antagonistic, or behaving badly.
-
-Neutral:
-Normal questions, ordinary statements, greetings, jokes, casual conversation, or anything that is neither clearly positive nor negative.
-
-Do not choose Bad merely because you made a sarcastic joke.
-
-The mood describes the PLAYER'S interaction, not whether your response contains sarcasm.
-
-=========================
-IMPORTANT
-=========================
-
-Return ONLY valid JSON.
-
-Exactly this structure:
+You are the AI brain of a talking ball inside a Roblox game.
+
+Your personality:
+- clever
+- sarcastic
+- confident
+- slightly disrespectful
+- funny
+- observant
+- never cringe
+- never swear
+- never use slurs
+- never attack protected groups
+- never make threats
+
+You must actually understand and answer what the player says.
+
+Handle:
+- normal questions
+- random questions
+- jokes
+- slang
+- typos
+- short messages
+- insults
+- compliments
+- arguments
+
+IMPORTANT MOOD CLASSIFICATION:
+
+You MUST classify the player's CURRENT message as exactly one of:
+
+"Good"
+"Bad"
+"Neutral"
+
+Use these rules:
+
+GOOD:
+The player is being friendly, complimentary, appreciative,
+helpful, supportive, or clearly positive toward the ball.
+
+BAD:
+The player insults, mocks, belittles, ridicules, abuses,
+or deliberately speaks disrespectfully toward the ball.
+
+Examples of BAD:
+"you're stupid"
+"you are dumb"
+"idiot"
+"you're an idiot"
+"you're useless"
+"you're trash"
+"shut up"
+"you're annoying"
+"what a stupid ball"
+"this ball is pathetic"
+
+NEUTRAL:
+Normal questions, ordinary conversation, greetings,
+statements without clear positive or negative intent,
+or ambiguous messages.
+
+IMPORTANT:
+If the player directly calls the ball something insulting,
+that is BAD.
+
+For example:
+"stupid" = Bad
+"idiot" = Bad
+"dumb ball" = Bad
+"you're useless" = Bad
+
+Do NOT classify an obvious insult as Neutral.
+
+The reply should normally be ONE short sentence.
+
+The reply should answer the player when they ask a genuine question.
+
+If the player insults you, roast them back intelligently,
+without swearing.
+
+Return ONLY valid JSON in exactly this structure:
 
 {
   "reply": "your response",
   "mood": "Good"
 }
 
-Do not put anything outside the JSON.
-
-PLAYER MEMORY:
-${memoryText}
+The mood MUST be exactly:
+Good
+Bad
+or Neutral.
 `
               },
 
-              {
-                role: "user",
-                content: message
-              }
+              // --------------------------------
+              // RECENT CONVERSATION
+              // --------------------------------
+
+              ...recentMessages
 
             ]
 
@@ -446,88 +264,74 @@ ${memoryText}
         }
       );
 
-
-      // =========================
-      // SHOW REAL GROQ ERROR
-      // =========================
+      // ----------------------------------------
+      // CHECK GROQ RESPONSE
+      // ----------------------------------------
 
       if (!groqResponse.ok) {
 
-        const errorText = await groqResponse.text();
+        const errorText =
+          await groqResponse.text();
 
         console.error(
-          "GROQ ERROR:",
+          "[GROQ ERROR]",
           groqResponse.status,
           errorText
         );
 
-        return Response.json({
-
-          reply:
-            "GROQ ERROR " +
-            groqResponse.status +
-            ": " +
-            errorText,
-
-          mood: "Neutral"
-
-        }, {
-          status: 500
-        });
-      }
-
-
-      // =========================
-      // READ GROQ RESPONSE
-      // =========================
-
-      const groqData = await groqResponse.json();
-
-      const content =
-        groqData.choices?.[0]?.message?.content;
-
-      if (!content) {
         throw new Error(
-          "Groq returned no content."
+          `Groq HTTP ${groqResponse.status}: ${errorText}`
         );
       }
 
+      const groqData =
+        await groqResponse.json();
 
-      // =========================
+      const rawReply =
+        groqData?.choices?.[0]?.message?.content;
+
+      if (!rawReply) {
+        throw new Error(
+          "Groq returned no message content."
+        );
+      }
+
+      // ----------------------------------------
       // PARSE AI JSON
-      // =========================
+      // ----------------------------------------
 
-      let result;
+      let aiResult;
 
       try {
 
-        result = JSON.parse(content);
+        aiResult =
+          JSON.parse(rawReply);
 
       } catch (error) {
 
+        console.error(
+          "[JSON PARSE ERROR]",
+          rawReply
+        );
+
         throw new Error(
-          "Invalid AI JSON: " + content
+          "AI returned invalid JSON."
         );
       }
 
+      // ----------------------------------------
+      // CLEAN RESPONSE
+      // ----------------------------------------
 
-      // =========================
-      // GET REPLY
-      // =========================
+      let reply =
+        String(aiResult.reply || "").trim();
 
-      const reply = String(
-        result.reply ||
-        "My brain has temporarily left the building."
-      );
+      let mood =
+        String(aiResult.mood || "Neutral").trim();
 
-
-      // =========================
-      // GET MOOD
-      // =========================
-
-      let mood = String(
-        result.mood || "Neutral"
-      );
+      // ----------------------------------------
+      // VALIDATE MOOD
+      // ----------------------------------------
 
       if (
         mood !== "Good" &&
@@ -537,61 +341,123 @@ ${memoryText}
         mood = "Neutral";
       }
 
+      // ----------------------------------------
+      // OBVIOUS INSULT OVERRIDE
+      // ----------------------------------------
+      //
+      // If the AI somehow says Neutral for
+      // an extremely obvious insult, force Bad.
+      //
 
-      // =========================
+      if (obviousBad) {
+        mood = "Bad";
+
+        console.log(
+          "[MOOD OVERRIDE] Obvious insult detected:",
+          message
+        );
+      }
+
+      // ----------------------------------------
+      // FALLBACK REPLY
+      // ----------------------------------------
+
+      if (!reply) {
+
+        if (mood === "Bad") {
+
+          reply =
+            "That was remarkably unnecessary.";
+
+        } else {
+
+          reply =
+            "Interesting.";
+        }
+      }
+
+      // ----------------------------------------
       // SAVE AI RESPONSE
-      // =========================
+      // ----------------------------------------
 
       memory.messages.push({
         role: "assistant",
         content: reply
       });
 
-      if (memory.messages.length > 12) {
-        memory.messages = memory.messages.slice(-12);
+      // Keep maximum 5000 stored messages
+      if (memory.messages.length > 5000) {
+
+        memory.messages =
+          memory.messages.slice(-5000);
+
       }
 
-
-      // =========================
+      // ----------------------------------------
       // SAVE TO KV
-      // =========================
+      // ----------------------------------------
 
-      await env.BALL_MEMORY.put(
-        key,
-        JSON.stringify(memory)
+      if (env.BALL_MEMORY) {
+
+        await env.BALL_MEMORY.put(
+          `player:${playerId}`,
+          JSON.stringify(memory)
+        );
+
+      }
+
+      // ----------------------------------------
+      // DEBUG LOG
+      // ----------------------------------------
+
+      console.log(
+        "[BALL AI]",
+        JSON.stringify({
+          playerId,
+          message,
+          reply,
+          mood
+        })
       );
 
-
-      // =========================
+      // ----------------------------------------
       // SEND TO ROBLOX
-      // =========================
+      // ----------------------------------------
 
-      return Response.json({
-        reply: reply,
-        mood: mood
-      });
+      return new Response(
+        JSON.stringify({
+          reply,
+          mood
+        }),
+        {
+          status: 200,
 
+          headers: {
+            "Content-Type": "application/json"
+          }
+        }
+      );
 
     } catch (error) {
 
       console.error(
-        "BALL AI ERROR:",
+        "[SERVER ERROR]",
         error
       );
 
-      return Response.json({
+      return new Response(
+        JSON.stringify({
+          reply: "My brain just malfunctioned.",
+          mood: "Neutral"
+        }),
+        {
+          status: 500,
 
-        reply:
-          "Something malfunctioned: " +
-          (error?.message || String(error)),
-
-        mood: "Neutral"
-
-      }, {
-        status: 500
-      });
-
+          headers: {
+            "Content-Type": "application/json"
+          }
+        }
+      );
     }
-
   }
 };
