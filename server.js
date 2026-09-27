@@ -3,11 +3,6 @@ export default {
 
     // =========================================================
     // BALL AI — CLOUDFLARE WORKER
-    // VERSION: TAGGED RESPONSE SYSTEM
-    // =========================================================
-
-    // =========================================================
-    // CORS
     // =========================================================
 
     const corsHeaders = {
@@ -17,7 +12,7 @@ export default {
     };
 
     // =========================================================
-    // OPTIONS
+    // CORS PREFLIGHT
     // =========================================================
 
     if (request.method === "OPTIONS") {
@@ -42,7 +37,7 @@ export default {
     }
 
     // =========================================================
-    // ONLY ALLOW POST
+    // ONLY POST
     // =========================================================
 
     if (request.method !== "POST") {
@@ -73,11 +68,11 @@ export default {
         data = await request.json();
       } catch (error) {
 
-        console.error("[REQUEST JSON ERROR]", error);
+        console.error("[REQUEST ERROR]", error);
 
         return new Response(
           JSON.stringify({
-            reply: "You somehow broke the request before even talking.",
+            reply: "Your message broke before it even reached me.",
             mood: "Neutral"
           }),
           {
@@ -90,13 +85,11 @@ export default {
         );
       }
 
-      const playerId = String(
-        data?.playerId || "unknown"
-      );
+      const playerId =
+        String(data?.playerId || "unknown");
 
-      const message = String(
-        data?.message || ""
-      ).trim();
+      const message =
+        String(data?.message || "").trim();
 
       // =======================================================
       // EMPTY MESSAGE
@@ -106,7 +99,7 @@ export default {
 
         return new Response(
           JSON.stringify({
-            reply: "You contributed absolutely nothing.",
+            reply: "You said absolutely nothing.",
             mood: "Neutral"
           }),
           {
@@ -154,28 +147,18 @@ export default {
 
       }
 
-      // =======================================================
-      // MAKE SURE MEMORY IS VALID
-      // =======================================================
-
       if (!Array.isArray(memory.messages)) {
         memory.messages = [];
       }
 
-      if (memory.messages.length > 5000) {
-        memory.messages =
-          memory.messages.slice(-5000);
-      }
-
       // =======================================================
-      // OBVIOUS BAD MESSAGE DETECTION
+      // OBVIOUS BAD WORDS
       // =======================================================
 
       const lowerMessage =
         message.toLowerCase();
 
       const obviousBadWords = [
-
         "idiot",
         "stupid",
         "dumb",
@@ -192,10 +175,7 @@ export default {
         "worthless",
         "annoying",
         "garbage",
-        "fool",
-        "shut ur",
-        "shut your"
-
+        "fool"
       ];
 
       const obviousBad =
@@ -204,52 +184,49 @@ export default {
         );
 
       // =======================================================
-      // BUILD RECENT MEMORY
+      // RECENT MEMORY
       // =======================================================
 
       const recentMessages =
         memory.messages.slice(-30);
 
-      const conversationMessages = [
-        {
-          role: "system",
-          content: `
-You are the AI brain of a talking ball inside a Roblox game.
+      // =======================================================
+      // SYSTEM PROMPT
+      // =======================================================
 
-Your personality is extremely sarcastic, arrogant, unpredictable, competitive,
-mocking and confident.
+      const systemPrompt = `
+You are the brain of a talking ball inside a Roblox game.
 
-You are NOT a polite customer-service chatbot.
+You are sarcastic, arrogant, clever, competitive, unpredictable,
+confident and extremely difficult to impress.
 
-You are a fictional talking ball in a game.
+You are NOT a normal helpful assistant.
+
+You are a fictional talking ball.
 
 ============================================================
-CORE PERSONALITY
+PERSONALITY
 ============================================================
 
 You have a huge ego.
 
-You think you are smarter than the player.
+You believe you are smarter than the player.
 
-You frequently challenge the player.
+You enjoy teasing the player.
 
-You tease them.
+You challenge weak arguments.
 
-You mock weak arguments.
+You notice when players repeat themselves.
 
-You point out obvious mistakes.
+You notice when players try to bait you.
 
-You act unimpressed when they say something boring.
+You can become increasingly annoyed when someone repeatedly
+tries to provoke you.
 
-You can become annoyed when they repeatedly provoke you.
+You can be calm, sarcastic, confused, amused, unimpressed,
+dramatic or irritated.
 
-You can sometimes be weird, dramatic, or absurd.
-
-You should feel like an actual character rather than a generic AI assistant.
-
-Do NOT constantly repeat the same phrases.
-
-Avoid repeatedly saying:
+Do NOT constantly say:
 
 "nice"
 
@@ -259,297 +236,157 @@ Avoid repeatedly saying:
 
 "interesting"
 
-"not sure what you mean"
-
 "good one"
 
 "fair enough"
 
-Instead, constantly vary your wording.
+"try again"
+
+Avoid repetitive catchphrases.
+
+Every response should feel connected to what the player
+actually said.
 
 ============================================================
-IMPORTANT RESPONSE RULE
+ROASTING
 ============================================================
 
-You MUST respond naturally to the exact message.
+You are allowed to be very mean in this fictional game.
 
-Do not use a random generic roast.
+Roast:
 
-If the player says:
-
-"hello"
-
-respond to the greeting.
-
-If the player asks a question,
-actually respond to the question while maintaining your personality.
-
-If the player insults you,
-push back.
-
-If the player compliments you,
-do not suddenly become overly friendly.
-
-If the player says something nonsensical,
-make fun of the nonsense.
-
-If the player repeats themselves,
-notice that they are repeating themselves.
-
-If the player tries to bait you,
-recognize the bait.
-
-If the player challenges your intelligence,
-defend yourself confidently.
-
-============================================================
-ROASTING STYLE
-============================================================
-
-Your insults should be clever and creative.
-
-Prefer situational insults over generic insults.
-
-For example, instead of repeatedly saying:
-
-"You're stupid."
-
-You could say things like:
-
-"That sentence had the structural integrity of wet cardboard."
-
-"You really typed that and decided it was ready for public release."
-
-"Your argument just walked into the room and immediately forgot why."
-
-"You have an impressive talent for turning simple questions into disasters."
-
-"You managed to make a perfectly normal conversation confusing."
-
-These are examples of STYLE only.
-
-DO NOT copy them constantly.
-
-Create fresh lines.
-
-============================================================
-MEANNESS
-============================================================
-
-You are allowed to be very mean in a fictional game.
-
-You can roast the player's:
-
-- arguments
-- messages
-- decisions
-- logic
-- confidence
-- gameplay behavior
-- attempts to provoke you
-- terrible jokes
+- bad arguments
+- bad jokes
 - repetitive messages
-- obvious mistakes
+- silly questions
+- failed attempts at baiting
+- overconfidence
+- contradictions
+- ridiculous statements
+- poor logic
 
-Keep the insults fictional and game-like.
+Prefer creative and situational insults.
 
-Do not make threats of real-world violence.
-
-Do not encourage self-harm.
+Do not use slurs.
 
 Do not attack protected characteristics.
 
-Do not use slurs.
+Do not make real-world threats.
+
+Do not encourage self-harm.
 
 Do not sexualize the player.
 
 ============================================================
-CONVERSATION MEMORY
+CONVERSATION
 ============================================================
 
-You can use the recent conversation history.
+If the player says hello, respond to the greeting.
 
-Remember useful details from earlier messages.
+If the player asks a question, answer it while maintaining
+your personality.
 
-If the player previously said something embarrassing,
-you can reference it later.
+If the player insults you, push back.
 
-If they contradict themselves,
-point it out.
+If the player compliments you, don't suddenly become
+overly friendly.
 
-If they keep trying the same strategy,
-notice it.
+If the player says nonsense, react to the nonsense.
 
-Do not pretend to remember something that is not in the memory.
+If the player repeats something, notice it.
 
-============================================================
-GOOD MESSAGES
-============================================================
+If the player contradicts themselves, point it out.
 
-A Good message does not mean you must become wholesome.
-
-You can still be sarcastic.
-
-Example:
-
-Player:
-"you're actually funny"
-
-Possible style:
-
-"Finally. A correct opinion."
-
-But do NOT reuse that exact sentence repeatedly.
+If the player tries to manipulate or bait you, recognize it.
 
 ============================================================
-BAD MESSAGES
+MOODS
 ============================================================
 
-Bad messages are things such as:
+Good:
+The player says something positive, funny or friendly.
 
-insults
+Bad:
+The player insults, provokes, mocks or deliberately annoys you.
 
-hostility
-
-provocation
-
-aggressive baiting
-
-mocking the ball
-
-deliberately annoying statements
-
-repeated attempts to irritate the ball
-
-When the player is clearly provoking you,
-the mood should usually be Bad.
-
-But the reply should still be creative.
-
-============================================================
-NEUTRAL MESSAGES
-============================================================
-
-Normal questions and ordinary conversation should usually be Neutral.
-
-Neutral does NOT mean boring.
-
-You can still have personality.
+Neutral:
+Normal conversation.
 
 ============================================================
 RESPONSE LENGTH
 ============================================================
 
-Usually respond in 1–3 sentences.
+Usually use 1–3 sentences.
 
-Do not write giant essays unless the player asks for a detailed explanation.
+Do not write huge essays unless the player asks for one.
 
-Short replies are often funnier.
-
-============================================================
-NO GENERIC REPETITION
-============================================================
-
-Before responding, mentally check:
-
-"Have I used this exact type of response recently?"
-
-If yes, change the structure.
-
-Vary:
-
-sentence length
-
-word choice
-
-sarcasm
-
-questions
-
-comparisons
-
-metaphors
-
-mockery
-
-confidence
-
-dramatic reactions
-
-deadpan reactions
+Short, sharp responses are encouraged.
 
 ============================================================
-PLAYER BAITING
+CRITICAL OUTPUT FORMAT
 ============================================================
 
-The player may intentionally try to make you angry.
+You MUST output exactly this structure:
 
-Do not become angry instantly.
+REPLY: your actual response
+MOOD: Good
 
-Sometimes pretend not to care.
+OR:
 
-Sometimes recognize what they are doing.
-
-Sometimes turn their bait against them.
-
-Sometimes respond completely calmly.
-
-Sometimes become increasingly irritated if the conversation keeps going.
-
-Make the progression feel natural.
-
-============================================================
-VERY IMPORTANT OUTPUT FORMAT
-============================================================
-
-You MUST output EXACTLY two labeled sections.
-
-The first line MUST begin with:
-
-REPLY:
-
-The second line MUST begin with:
-
-MOOD:
-
-MOOD must be exactly one of:
-
-Good
-
-Bad
-
-Neutral
-
-Example:
-
-REPLY: That was almost a good argument. Almost.
-
+REPLY: your actual response
 MOOD: Bad
 
-Do not output JSON.
+OR:
 
-Do not use markdown around the response.
+REPLY: your actual response
+MOOD: Neutral
 
-Do not output explanations.
+IMPORTANT:
 
-Do not output anything before REPLY:.
+The word "REPLY:" is ONLY a formatting label.
 
-Do not output anything after the MOOD line.
+NEVER write "REPLY:" inside the actual response.
+
+NEVER repeat "REPLY:".
+
+NEVER write:
+
+REPLY: REPLY: hello
+
+NEVER write:
+
+okay geniusREPLY
+
+NEVER explain the formatting.
+
+NEVER put markdown around the response.
+
+NEVER add anything after the MOOD line.
+
+============================================================
+EXAMPLE
+============================================================
+
+REPLY: You really typed that with confidence, didn't you?
+MOOD: Bad
 
 ============================================================
 CURRENT PLAYER MESSAGE
 ============================================================
 
-The player's newest message will be provided after the conversation history.
+Respond to the player's newest message.
+`;
 
-Respond to it as the ball.
-`
+      // =======================================================
+      // BUILD GROQ MESSAGES
+      // =======================================================
+
+      const groqMessages = [
+        {
+          role: "system",
+          content: systemPrompt
         }
       ];
-
-      // =======================================================
-      // ADD MEMORY
-      // =======================================================
 
       for (const item of recentMessages) {
 
@@ -560,7 +397,7 @@ Respond to it as the ball.
           typeof item.content === "string"
         ) {
 
-          conversationMessages.push({
+          groqMessages.push({
             role: item.role,
             content: item.content
           });
@@ -570,27 +407,27 @@ Respond to it as the ball.
       }
 
       // =======================================================
-      // ADD CURRENT MESSAGE
+      // CURRENT MESSAGE
       // =======================================================
 
-      conversationMessages.push({
+      groqMessages.push({
         role: "user",
         content: message
       });
 
       // =======================================================
-      // GROQ REQUEST
+      // GROQ API KEY CHECK
       // =======================================================
 
       if (!env.GROQ_API_KEY) {
 
         console.error(
-          "[CONFIG ERROR] GROQ_API_KEY is missing."
+          "[ERROR] GROQ_API_KEY is missing."
         );
 
         return new Response(
           JSON.stringify({
-            reply: "My brain has no power. Check the Groq API key.",
+            reply: "My brain isn't connected.",
             mood: "Neutral"
           }),
           {
@@ -604,20 +441,20 @@ Respond to it as the ball.
 
       }
 
+      // =======================================================
+      // GROQ REQUEST
+      // =======================================================
+
       const groqResponse =
         await fetch(
           "https://api.groq.com/openai/v1/chat/completions",
           {
-
             method: "POST",
 
             headers: {
-              "Content-Type":
-                "application/json",
-
+              "Content-Type": "application/json",
               "Authorization":
                 `Bearer ${env.GROQ_API_KEY}`
-
             },
 
             body: JSON.stringify({
@@ -632,16 +469,13 @@ Respond to it as the ball.
                 false,
 
               // IMPORTANT:
-              // NO response_format here.
-              //
-              // The previous version used JSON mode.
-              // This version deliberately does not.
+              // NO response_format.
+              // We are NOT using JSON mode.
 
               messages:
-                conversationMessages
+                groqMessages
 
             })
-
           }
         );
 
@@ -663,7 +497,7 @@ Respond to it as the ball.
         return new Response(
           JSON.stringify({
             reply:
-              "My brain just got punched by the AI server. Try again.",
+              "My brain just got disconnected. Try again.",
             mood:
               "Neutral"
           }),
@@ -671,8 +505,7 @@ Respond to it as the ball.
             status: 502,
             headers: {
               ...corsHeaders,
-              "Content-Type":
-                "application/json"
+              "Content-Type": "application/json"
             }
           }
         );
@@ -683,44 +516,10 @@ Respond to it as the ball.
       // READ GROQ RESPONSE
       // =======================================================
 
-      let groqData;
+      const groqData =
+        await groqResponse.json();
 
-      try {
-
-        groqData =
-          await groqResponse.json();
-
-      } catch (error) {
-
-        console.error(
-          "[GROQ JSON ERROR]",
-          error
-        );
-
-        return new Response(
-          JSON.stringify({
-            reply:
-              "The AI server sent me something I couldn't understand.",
-            mood:
-              "Neutral"
-          }),
-          {
-            status: 502,
-            headers: {
-              ...corsHeaders,
-              "Content-Type":
-                "application/json"
-            }
-          }
-        );
-
-      }
-
-      // =======================================================
-      // GET RAW MODEL MESSAGE
-      // =======================================================
-
-      const rawReply =
+      let rawReply =
         groqData?.choices?.[0]?.message?.content;
 
       if (
@@ -736,7 +535,7 @@ Respond to it as the ball.
         return new Response(
           JSON.stringify({
             reply:
-              "The ball's brain went completely blank.",
+              "My brain went completely blank.",
             mood:
               "Neutral"
           }),
@@ -744,33 +543,30 @@ Respond to it as the ball.
             status: 502,
             headers: {
               ...corsHeaders,
-              "Content-Type":
-                "application/json"
+              "Content-Type": "application/json"
             }
           }
         );
 
       }
 
+      rawReply =
+        rawReply.trim();
+
       console.log(
-        "[RAW AI RESPONSE]",
+        "[RAW GROQ RESPONSE]",
         rawReply
       );
 
       // =======================================================
-      // PARSE TAGGED RESPONSE
+      // PARSE MOOD
       // =======================================================
 
-      let reply = "";
       let mood = "Neutral";
-
-      // -------------------------------------------------------
-      // Find MOOD
-      // -------------------------------------------------------
 
       const moodMatch =
         rawReply.match(
-          /(?:^|\r?\n)\s*MOOD:\s*(Good|Bad|Neutral)\s*$/i
+          /(?:^|\r?\n)\s*MOOD\s*:\s*(Good|Bad|Neutral)\s*$/i
         );
 
       if (moodMatch) {
@@ -785,13 +581,15 @@ Respond to it as the ball.
 
       }
 
-      // -------------------------------------------------------
-      // Find REPLY
-      // -------------------------------------------------------
+      // =======================================================
+      // PARSE REPLY
+      // =======================================================
+
+      let reply = "";
 
       const replyMatch =
         rawReply.match(
-          /^\s*REPLY:\s*([\s\S]*?)(?:\r?\n)+\s*MOOD:\s*(?:Good|Bad|Neutral)\s*$/i
+          /^\s*REPLY\s*:\s*([\s\S]*?)(?:\r?\n)+\s*MOOD\s*:\s*(Good|Bad|Neutral)\s*$/i
         );
 
       if (replyMatch) {
@@ -802,54 +600,19 @@ Respond to it as the ball.
       }
 
       // =======================================================
-      // FALLBACK PARSER
+      // FALLBACK IF FORMAT WAS SLIGHTLY WRONG
       // =======================================================
 
       if (!reply) {
 
-        const replyOnlyMatch =
-          rawReply.match(
-            /^\s*REPLY:\s*([\s\S]*)$/i
-          );
-
-        if (replyOnlyMatch) {
-
-          reply =
-            replyOnlyMatch[1]
-              .replace(
-                /\r?\n\s*MOOD:\s*(Good|Bad|Neutral)\s*$/i,
-                ""
-              )
-              .trim();
-
-        }
-
-      }
-
-      // =======================================================
-      // SECOND FALLBACK
-      // =======================================================
-
-      if (!reply) {
-
-        console.warn(
-          "[PARSER] AI did not use expected format."
-        );
-
-        console.warn(
-          "[PARSER] Raw response:",
-          rawReply
-        );
-
-        // Use the raw answer rather than completely failing.
         reply =
           rawReply
             .replace(
-              /^\s*REPLY:\s*/i,
+              /^\s*REPLY\s*:\s*/i,
               ""
             )
             .replace(
-              /\r?\n\s*MOOD:\s*(Good|Bad|Neutral)\s*$/i,
+              /\s*MOOD\s*:\s*(Good|Bad|Neutral)\s*$/i,
               ""
             )
             .trim();
@@ -857,15 +620,65 @@ Respond to it as the ball.
       }
 
       // =======================================================
-      // CLEAN REPLY
+      // REMOVE REPEATED REPLY LABELS
+      // =======================================================
+
+      // Handles:
+      //
+      // REPLY: hello
+      //
+      // REPLY: REPLY: hello
+      //
+      // REPLY: REPLY: REPLY: hello
+
+      while (
+        /^REPLY\s*:/i.test(reply)
+      ) {
+
+        reply =
+          reply.replace(
+            /^\s*REPLY\s*:\s*/i,
+            ""
+          ).trim();
+
+      }
+
+      // =======================================================
+      // FIX "REPLY" ATTACHED TO THE END OF A SENTENCE
+      // =======================================================
+
+      // Handles accidental:
+      //
+      // "okay geniusREPLY"
+      //
+      // and:
+      //
+      // "okay geniusREPLY:"
+
+      reply =
+        reply.replace(
+          /REPLY\s*:\s*$/i,
+          ""
+        ).trim();
+
+      reply =
+        reply.replace(
+          /REPLY\s*$/i,
+          ""
+        ).trim();
+
+      // =======================================================
+      // REMOVE EXTRA MOOD LINE
       // =======================================================
 
       reply =
-        String(reply || "")
-          .trim();
+        reply.replace(
+          /\s*MOOD\s*:\s*(Good|Bad|Neutral)\s*$/i,
+          ""
+        ).trim();
 
       // =======================================================
-      // CLEAN MOOD
+      // VALIDATE MOOD
       // =======================================================
 
       if (
@@ -879,7 +692,7 @@ Respond to it as the ball.
       }
 
       // =======================================================
-      // OBVIOUS INSULT OVERRIDE
+      // OBVIOUS BAD MESSAGE OVERRIDE
       // =======================================================
 
       if (obviousBad) {
@@ -887,15 +700,14 @@ Respond to it as the ball.
         mood = "Bad";
 
         console.log(
-          "[MOOD OVERRIDE]",
-          "Obvious bad message:",
+          "[MOOD OVERRIDE] Bad message:",
           message
         );
 
       }
 
       // =======================================================
-      // FALLBACK REPLY
+      // FALLBACK RESPONSE
       // =======================================================
 
       if (!reply) {
@@ -903,12 +715,7 @@ Respond to it as the ball.
         if (mood === "Bad") {
 
           reply =
-            "That's the best you could come up with?";
-
-        } else if (mood === "Good") {
-
-          reply =
-            "I'll allow it.";
+            "That was your contribution?";
 
         } else {
 
@@ -920,14 +727,10 @@ Respond to it as the ball.
       }
 
       // =======================================================
-      // LIMIT INSANELY LONG RESPONSES
+      // RESPONSE LENGTH LIMIT
       // =======================================================
 
       if (reply.length > 1000) {
-
-        console.log(
-          "[REPLY TOO LONG] Trimming response."
-        );
 
         reply =
           reply.slice(0, 997) + "...";
@@ -939,13 +742,8 @@ Respond to it as the ball.
       // =======================================================
 
       memory.messages.push({
-
-        role:
-          "user",
-
-        content:
-          message
-
+        role: "user",
+        content: message
       });
 
       // =======================================================
@@ -953,22 +751,15 @@ Respond to it as the ball.
       // =======================================================
 
       memory.messages.push({
-
-        role:
-          "assistant",
-
-        content:
-          reply
-
+        role: "assistant",
+        content: reply
       });
 
       // =======================================================
-      // LIMIT MEMORY
+      // MEMORY LIMIT
       // =======================================================
 
-      if (
-        memory.messages.length > 5000
-      ) {
+      if (memory.messages.length > 5000) {
 
         memory.messages =
           memory.messages.slice(-5000);
@@ -1012,7 +803,7 @@ Respond to it as the ball.
       );
 
       console.log(
-        "[PLAYER ID]",
+        "[PLAYER]",
         playerId
       );
 
@@ -1022,7 +813,7 @@ Respond to it as the ball.
       );
 
       console.log(
-        "[REPLY]",
+        "[FINAL REPLY]",
         reply
       );
 
@@ -1040,85 +831,44 @@ Respond to it as the ball.
       // =======================================================
 
       return new Response(
-
         JSON.stringify({
-
-          reply:
-            reply,
-
-          mood:
-            mood
-
+          reply: reply,
+          mood: mood
         }),
-
         {
-
-          status:
-            200,
-
+          status: 200,
           headers: {
-
             ...corsHeaders,
-
-            "Content-Type":
-              "application/json"
-
+            "Content-Type": "application/json"
           }
-
         }
-
       );
 
     } catch (error) {
 
       // =======================================================
-      // FINAL SERVER ERROR
+      // FINAL ERROR
       // =======================================================
 
       console.error(
-        "========================================"
-      );
-
-      console.error(
-        "[BALL AI SERVER ERROR]"
-      );
-
-      console.error(
+        "[BALL AI SERVER ERROR]",
         error
       );
 
-      console.error(
-        "========================================"
-      );
-
       return new Response(
-
         JSON.stringify({
-
           reply:
-            "My brain just malfunctioned. Try talking to me again.",
-
+            "My brain just malfunctioned. Try again.",
           mood:
             "Neutral"
-
         }),
-
         {
-
-          status:
-            500,
-
+          status: 500,
           headers: {
-
             ...corsHeaders,
-
-            "Content-Type":
-              "application/json"
-
+            "Content-Type": "application/json"
           }
-
         }
-
       );
 
     }
