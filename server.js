@@ -10,6 +10,15 @@ export default {
     const respond = (data, status = 200) =>
       new Response(JSON.stringify(data), { status, headers });
 
+    const pardon = (error, status = 502) => {
+      console.error("[BALL ERROR]", error);
+      return respond({
+        reply: "Pardon?",
+        mood: "Neutral",
+        error
+      }, status);
+    };
+
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers });
     }
@@ -33,26 +42,21 @@ export default {
 
       if (!message) {
         return respond({
-          reply: `${username || "Player"}, you said absolutely nothing.`,
+          reply: "Pardon?",
           mood: "Neutral"
         });
       }
 
       if (!username) {
         return respond({
-          reply: "I can't figure out who's talking to me.",
+          reply: "Pardon?",
           mood: "Neutral",
           error: "INVALID_USERNAME"
         }, 400);
       }
 
       if (!env.GROQ_API_KEY) {
-        console.error("[CONFIG ERROR] GROQ_API_KEY is missing.");
-        return respond({
-          reply: `${username}, my brain isn't connected.`,
-          mood: "Neutral",
-          error: "MISSING_API_KEY"
-        }, 500);
+        return pardon("MISSING_API_KEY", 500);
       }
 
       // Load this player's separate conversation memory.
@@ -73,7 +77,7 @@ export default {
         }
       }
 
-      // Keep recent exchanges together so the AI can follow the argument.
+      // Keep recent conversation history for context.
       const history = memory.messages
         .filter(item =>
           item &&
@@ -92,91 +96,68 @@ You are a sarcastic, arrogant, clever talking ball in a multiplayer Roblox game.
 THE PLAYER YOU ARE TALKING TO:
 ${username}
 
-YOUR PERSONALITY:
-You have a huge ego. You are witty, confident, competitive, unpredictable,
-and difficult to impress. You enjoy playful arguments and clever comebacks.
-You can roast the player, but do not repeat the same joke constantly.
+PERSONALITY:
+You have a huge ego. You are witty, confident, competitive,
+unpredictable and difficult to impress.
+You enjoy playful arguments and clever comebacks.
+Roast the player naturally without repeating the same joke constantly.
 You are a game character, not a helpful assistant.
 
-CRITICAL CONVERSATION RULES:
-You MUST understand the latest message using the conversation history.
-The history contains previous user messages and your own replies.
-Treat the conversation as ONE CONTINUOUS CONVERSATION, not separate questions.
+CONVERSATION CONTEXT:
+Treat the conversation as ONE CONTINUOUS CONVERSATION.
+Always consider the recent messages before answering.
+Understand short replies through their context.
 
-Short messages usually refer to something said immediately before them.
-Resolve what "it", "that", "you", "I'm not", "no", "why", "yeah",
-"nah", "ok", "sure" and similar expressions refer to by looking at
-the most recent relevant exchange.
+If you said "You're a loser" and the player says "I'm not",
+understand that they are denying being a loser.
+Do not respond with "You're not what?"
 
-Example:
-You: "You're a loser."
-Player: "I'm not."
-Correct response: "mabrixlit, denying it doesn't make you any less of a loser."
-Incorrect response: "mabrixlit, you're not what?"
+If you said "You lost that argument" and the player says "No I didn't",
+respond to their denial of losing the argument.
 
-Another example:
-You: "You clearly lost that argument."
-Player: "No I didn't."
-Respond to their denial of losing the argument. Do not ask what they mean.
+If the player says "Why?", answer in the context of your previous message.
+If the player says "Nah", understand that they are disagreeing.
+If the player says "Ok", respond naturally to the situation.
 
-Another example:
-You: "You're scared to argue with me."
-Player: "Why?"
-Explain or tease them about being scared. Do not treat "why?" as a new topic.
-
-Another example:
-You: "That was the weakest comeback I've heard."
-Player: "Nah."
-React to their disagreement with your previous statement.
-
-IMPORTANT:
-- Never pretend a short reply is meaningless when the context makes it clear.
-- Never ask "what do you mean?" if recent messages explain the meaning.
-- Do not simply repeat the player's words back to them.
-- Respond to the meaning, intention, denial, challenge or emotion behind
-  their latest message.
-- Remember who said each line. Your previous replies are not the player's words.
-- If the player changes topic clearly, follow the new topic.
-- If the context is genuinely ambiguous, make a reasonable interpretation
-  rather than repeatedly asking for clarification.
-- Keep continuity with promises, insults, jokes, challenges and claims made
-  earlier in the conversation.
-- Do not claim to remember details that are absent from the available history.
+Never treat an understandable short reply as a new conversation.
+Remember which messages you said and which messages the player said.
+Do not simply repeat the player's message.
+Keep track of ongoing jokes, arguments, challenges and claims.
+If the player clearly changes topic, follow the new topic.
+If the meaning is genuinely unclear, make a reasonable interpretation.
 
 PLAYER IDENTITY:
 Address this player as "${username}" at the beginning of every reply.
-Never use another player's name. Never mistake their name for their message.
+Never use another player's name.
+Never mistake the username for the player's message.
 
-MOOD:
+MOODS:
 Good = friendly, positive or genuinely funny interaction.
 Bad = insults, mockery, deliberate provocation or repeated annoyance.
 Neutral = ordinary conversation.
-Choose the mood based on the player's latest message and the conversation.
+Choose the mood based on the player's latest message and context.
 
 STYLE:
-Use natural, short, game-style dialogue, usually one sentence.
-Be specific to what just happened in the conversation.
-No bullet points, markdown, or dash-led formatting.
+Speak naturally like a real game character.
+Usually use one short sentence.
+Be witty, sarcastic and specific to the conversation.
+No bullet points or markdown.
 No real-world threats, slurs, protected-characteristic attacks,
 self-harm encouragement or sexual content.
 
-OUTPUT:
+OUTPUT FORMAT:
 Return exactly two lines:
-REPLY: [one natural reply]
-MOOD: [Good, Bad, or Neutral]
+REPLY: your actual response
+MOOD: Good, Bad, or Neutral
 
-The REPLY must contain only the actual spoken response.
-Never include the word REPLY or MOOD inside the spoken response.
-Do not write multiple alternative replies.
+The spoken reply must not contain the REPLY or MOOD labels.
+Do not provide multiple alternative replies.
 `;
 
       const groqMessages = [
         { role: "system", content: systemPrompt },
         ...history,
-        {
-          role: "user",
-          content: message
-        }
+        { role: "user", content: message }
       ];
 
       let groqResponse;
@@ -199,38 +180,21 @@ Do not write multiple alternative replies.
           }
         );
       } catch (error) {
-        console.error("[GROQ CONNECTION ERROR]", String(error));
-
-        return respond({
-          reply: `${username}, my brain lost connection. Try again.`,
-          mood: "Neutral",
-          error: "GROQ_CONNECTION_ERROR"
-        }, 502);
+        return pardon("GROQ_CONNECTION_ERROR");
       }
 
       if (!groqResponse.ok) {
         const details = (await groqResponse.text()).slice(0, 2000);
         console.error("[GROQ ERROR]", groqResponse.status, details);
 
-        return respond({
-          reply: `${username}, my brain is having trouble. Try again.`,
-          mood: "Neutral",
-          error: "GROQ_API_ERROR",
-          upstreamStatus: groqResponse.status
-        }, 502);
+        return pardon("GROQ_API_ERROR", 502);
       }
 
       const result = await groqResponse.json();
       const raw = result?.choices?.[0]?.message?.content;
 
       if (typeof raw !== "string" || !raw.trim()) {
-        console.error("[EMPTY GROQ RESPONSE]", JSON.stringify(result));
-
-        return respond({
-          reply: `${username}, my brain went blank. Try again.`,
-          mood: "Neutral",
-          error: "EMPTY_GROQ_RESPONSE"
-        }, 502);
+        return pardon("EMPTY_GROQ_RESPONSE");
       }
 
       let reply = raw.trim();
@@ -253,6 +217,7 @@ Do not write multiple alternative replies.
         reply = replyMatch[1].trim();
       }
 
+      // Remove accidental output labels.
       reply = reply
         .replace(/^\s*REPLY\s*:\s*/i, "")
         .replace(/\s*MOOD\s*:\s*(Good|Bad|Neutral)\s*$/i, "")
@@ -260,13 +225,14 @@ Do not write multiple alternative replies.
         .replace(/\n+/g, " ")
         .trim();
 
-      // Remove a duplicated REPLY section if the model accidentally repeats it.
+      // Remove any second REPLY section.
       const duplicateLabel = reply.search(/\bREPLY\s*:/i);
+
       if (duplicateLabel >= 0) {
         reply = reply.slice(0, duplicateLabel).trim();
       }
 
-      // Remove a duplicated username prefix.
+      // Remove the username if the AI already included it.
       const escapedUsername = username.replace(
         /[.*+?^${}()|[\]\\]/g,
         "\\$&"
@@ -285,7 +251,7 @@ Do not write multiple alternative replies.
 
       reply = `${username}, ${reply}`.slice(0, 500);
 
-      // Keep your existing general insult-to-Bad behaviour.
+      // Preserve your existing mood behaviour.
       const badWords = [
         "idiot", "stupid", "dumb", "shut up", "loser",
         "trash", "ugly", "hate you", "you suck", "suck",
@@ -297,7 +263,7 @@ Do not write multiple alternative replies.
         mood = "Bad";
       }
 
-      // Save the actual exchange, without output-format labels.
+      // Save the conversation separately for each player.
       memory.messages.push(
         { role: "user", content: message },
         { role: "assistant", content: reply }
@@ -323,13 +289,7 @@ Do not write multiple alternative replies.
       return respond({ reply, mood });
 
     } catch (error) {
-      console.error("[BALL AI SERVER ERROR]", String(error));
-
-      return respond({
-        reply: "Pardon?",
-        mood: "Neutral",
-        error: "WORKER_INTERNAL_ERROR"
-      }, 500);
+      return pardon("WORKER_INTERNAL_ERROR", 500);
     }
   }
 };
