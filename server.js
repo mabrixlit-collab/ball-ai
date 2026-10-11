@@ -1,17 +1,17 @@
 export default {
   async fetch(request, env) {
-    const cors = {
+    const headers = {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type",
       "Content-Type": "application/json"
     };
 
-    const json = (data, status = 200) =>
-      new Response(JSON.stringify(data), { status, headers: cors });
+    const respond = (data, status = 200) =>
+      new Response(JSON.stringify(data), { status, headers });
 
     if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: cors });
+      return new Response(null, { status: 204, headers });
     }
 
     if (request.method === "GET") {
@@ -21,31 +21,45 @@ export default {
     }
 
     if (request.method !== "POST") {
-      return json({ reply: "Use POST.", mood: "Neutral" }, 405);
+      return respond({
+        reply: "Use POST.",
+        mood: "Neutral"
+      }, 405);
     }
 
     try {
       const data = await request.json();
+
       const playerId = String(data?.playerId || "unknown");
+      const username = String(data?.username || "").trim();
       const message = String(data?.message || "").trim().slice(0, 500);
 
       if (!message) {
-        return json({
+        return respond({
           reply: "You said absolutely nothing.",
           mood: "Neutral"
         });
       }
 
+      if (!username || username.length > 20) {
+        return respond({
+          reply: "I can't figure out who's talking to me.",
+          mood: "Neutral",
+          error: "INVALID_USERNAME"
+        }, 400);
+      }
+
       if (!env.GROQ_API_KEY) {
         console.error("[CONFIG ERROR] GROQ_API_KEY is missing.");
-        return json({
+
+        return respond({
           reply: "My brain isn't connected.",
           mood: "Neutral",
           error: "MISSING_API_KEY"
         }, 500);
       }
 
-      // Load conversation memory.
+      // Keep each player's memory separate.
       let memory = { messages: [] };
 
       if (env.BALL_MEMORY) {
@@ -63,7 +77,7 @@ export default {
         }
       }
 
-      // Use only the latest 12 conversation messages.
+      // Limit prompt size so conversations don't grow endlessly.
       const history = memory.messages
         .filter(item =>
           item &&
@@ -73,7 +87,7 @@ export default {
         .slice(-12)
         .map(item => ({
           role: item.role,
-          content: item.content.slice(0, 1000)
+          content: item.content.slice(0, 700)
         }));
 
       const badWords = [
@@ -88,34 +102,46 @@ export default {
       );
 
       const systemPrompt = `
-You are a sarcastic, arrogant, clever talking ball in a Roblox game.
+You are a sarcastic, arrogant, clever talking ball in a multiplayer Roblox game.
+
+CURRENT PLAYER USERNAME: ${username}
 
 PERSONALITY:
-- Confident, witty, competitive and difficult to impress.
-- Tease the player and respond specifically to what they say.
-- Notice repeated messages, contradictions and failed attempts to provoke you.
-- Do not constantly reuse catchphrases.
-- Be conversational, with usually one or two short sentences.
-- Do not write essays unless asked.
-- No slurs, protected-characteristic attacks, real-world threats,
-  self-harm encouragement or sexual content.
+You have a huge ego. You are witty, confident, competitive,
+unpredictable and difficult to impress.
+Tease the player and respond specifically to what they say.
+Notice repeated messages, contradictions and failed attempts to provoke you.
+Avoid repetitive catchphrases.
+Usually answer in one or two short sentences.
+Do not act like a normal helpful assistant.
 
-MOOD:
+PLAYER IDENTITY:
+You are speaking to the player whose exact username is "${username}".
+Address that player by their username at the start of every reply.
+Never use another player's username.
+Never confuse the username with the player's message.
+Do not repeat the player's message.
+
+MOODS:
 Good = friendly, positive or genuinely funny interaction.
 Bad = insults, mockery, deliberate provocation or repeated annoyance.
 Neutral = ordinary conversation.
 
-OUTPUT RULES:
+STYLE:
+Speak naturally, like a real game character.
+No bullet points or dash-led sentences.
+No markdown.
+No real-world threats, slurs, protected-characteristic attacks,
+self-harm encouragement or sexual content.
+
+OUTPUT FORMAT:
 Return exactly two lines:
 REPLY: your actual response
-MOOD: Good, Bad, or Neutral
+MOOD: Good
 
-Never repeat the player's message.
-Never start your response by quoting the player's message.
-Never put the player's message followed by a colon.
-Never include the labels REPLY or MOOD inside your actual response.
-Never use bullet points, dash-led sentences or markdown.
-Speak naturally, as if replying directly to a player.
+The mood line must be Good, Bad, or Neutral.
+Never put REPLY or MOOD inside the actual response.
+Never repeat either label.
 `;
 
       const groqMessages = [
@@ -123,8 +149,6 @@ Speak naturally, as if replying directly to a player.
         ...history,
         { role: "user", content: message }
       ];
-
-      console.log("[BALL AI] Requesting reply for", playerId);
 
       let groqResponse;
 
@@ -140,31 +164,31 @@ Speak naturally, as if replying directly to a player.
             body: JSON.stringify({
               model: "openai/gpt-oss-20b",
               reasoning_effort: "low",
-              messages: groqMessages,
-              max_completion_tokens: 250
+              max_completion_tokens: 250,
+              messages: groqMessages
             })
           }
         );
       } catch (error) {
         console.error("[GROQ CONNECTION ERROR]", String(error));
 
-        return json({
-          reply: "My brain just lost connection. Try again.",
+        return respond({
+          reply: "My brain lost connection. Try again.",
           mood: "Neutral",
           error: "GROQ_CONNECTION_ERROR"
         }, 502);
       }
 
       if (!groqResponse.ok) {
-        const errorText = (await groqResponse.text()).slice(0, 2000);
+        const details = (await groqResponse.text()).slice(0, 2000);
 
         console.error(
           "[GROQ ERROR]",
           groqResponse.status,
-          errorText
+          details
         );
 
-        return json({
+        return respond({
           reply: "My brain is having trouble. Try again.",
           mood: "Neutral",
           error: "GROQ_API_ERROR",
@@ -172,31 +196,29 @@ Speak naturally, as if replying directly to a player.
         }, 502);
       }
 
-      const groqData = await groqResponse.json();
-      const raw = groqData?.choices?.[0]?.message?.content;
+      const result = await groqResponse.json();
+      const raw = result?.choices?.[0]?.message?.content;
 
       if (typeof raw !== "string" || !raw.trim()) {
-        console.error("[EMPTY RESPONSE]", JSON.stringify(groqData));
+        console.error("[EMPTY GROQ RESPONSE]", JSON.stringify(result));
 
-        return json({
+        return respond({
           reply: "My brain went blank. Try again.",
           mood: "Neutral",
           error: "EMPTY_GROQ_RESPONSE"
         }, 502);
       }
 
-      // Parse the response labels.
-      let mood = "Neutral";
       let reply = raw.trim();
+      let mood = "Neutral";
 
       const moodMatch = reply.match(
         /(?:^|\n)\s*MOOD\s*:\s*(Good|Bad|Neutral)\s*$/i
       );
 
       if (moodMatch) {
-        mood =
-          moodMatch[1].charAt(0).toUpperCase() +
-          moodMatch[1].slice(1).toLowerCase();
+        mood = moodMatch[1].toLowerCase();
+        mood = mood[0].toUpperCase() + mood.slice(1);
       }
 
       const replyMatch = reply.match(
@@ -207,12 +229,13 @@ Speak naturally, as if replying directly to a player.
         reply = replyMatch[1].trim();
       }
 
-      // Remove accidentally repeated labels.
-      reply = reply.replace(/^\s*REPLY\s*:\s*/i, "").trim();
-      reply = reply.replace(/\s*MOOD\s*:\s*(Good|Bad|Neutral)\s*$/i, "").trim();
+      // Strip accidental formatting labels.
+      reply = reply
+        .replace(/^\s*REPLY\s*:\s*/i, "")
+        .replace(/\s*MOOD\s*:\s*(Good|Bad|Neutral)\s*$/i, "")
+        .trim();
 
-      // Fix responses such as "hi: Hello!" when the player said "hi".
-      // Only remove the exact player message when it appears as a prefix.
+      // Remove the player's message if the model echoes it.
       const escapedMessage = message.replace(
         /[.*+?^${}()|[\]\\]/g,
         "\\$&"
@@ -225,28 +248,34 @@ Speak naturally, as if replying directly to a player.
 
       reply = reply.replace(echoedMessage, "").trim();
 
-      // Remove dash-style formatting, not ordinary hyphens in words.
+      // Remove accidental dash formatting.
       reply = reply
         .replace(/\r/g, "")
         .replace(/\n\s*[-*]\s+/g, " ")
         .replace(/\s+[—–]\s+/g, ". ")
         .replace(/\s+--\s+/g, ". ")
-        .replace(/^\s*REPLY\s*:\s*/i, "")
         .trim();
 
-      // Avoid empty or excessively long replies.
+      // Ensure the actual Roblox username appears exactly once at the start.
+      const usernamePrefix = new RegExp(
+        "^" + username.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") +
+        "\\s*[,!:—–-]*\\s*",
+        "i"
+      );
+
+      reply = reply.replace(usernamePrefix, "").trim();
+
       if (!reply) {
         reply = "You have my attention. Use it wisely.";
       }
 
-      reply = reply.slice(0, 500);
+      reply = `${username}, ${reply}`.slice(0, 500);
 
-      // Keep the obvious-insult override.
       if (obviousBad) {
         mood = "Bad";
       }
 
-      // Save clean messages, never formatting labels.
+      // Save the clean conversation separately for each player.
       memory.messages.push(
         { role: "user", content: message },
         { role: "assistant", content: reply }
@@ -265,15 +294,16 @@ Speak naturally, as if replying directly to a player.
         }
       }
 
+      console.log("[PLAYER]", username, playerId);
       console.log("[FINAL REPLY]", reply);
       console.log("[MOOD]", mood);
 
-      return json({ reply, mood });
+      return respond({ reply, mood });
 
     } catch (error) {
       console.error("[BALL AI SERVER ERROR]", String(error));
 
-      return json({
+      return respond({
         reply: "My brain malfunctioned. Try again.",
         mood: "Neutral",
         error: "WORKER_INTERNAL_ERROR"
