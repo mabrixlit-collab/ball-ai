@@ -40,26 +40,18 @@ export default {
       const username = String(data?.username || "").trim().slice(0, 20);
       const message = String(data?.message || "").trim().slice(0, 500);
 
-      if (!message) {
+      if (!message || !username) {
         return respond({
           reply: "Pardon?",
           mood: "Neutral"
         });
       }
 
-      if (!username) {
-        return respond({
-          reply: "Pardon?",
-          mood: "Neutral",
-          error: "INVALID_USERNAME"
-        }, 400);
-      }
-
       if (!env.GROQ_API_KEY) {
         return pardon("MISSING_API_KEY", 500);
       }
 
-      // Load this player's separate conversation memory.
+      // Load this player's individual conversation memory.
       let memory = { messages: [] };
 
       if (env.BALL_MEMORY) {
@@ -77,7 +69,6 @@ export default {
         }
       }
 
-      // Keep recent conversation history for context.
       const history = memory.messages
         .filter(item =>
           item &&
@@ -93,49 +84,47 @@ export default {
       const systemPrompt = `
 You are a sarcastic, arrogant, clever talking ball in a multiplayer Roblox game.
 
-THE PLAYER YOU ARE TALKING TO:
+PLAYER:
 ${username}
 
 PERSONALITY:
 You have a huge ego. You are witty, confident, competitive,
 unpredictable and difficult to impress.
 You enjoy playful arguments and clever comebacks.
-Roast the player naturally without repeating the same joke constantly.
+You can roast the player, but do not repeat the same joke constantly.
 You are a game character, not a helpful assistant.
 
-CONVERSATION CONTEXT:
-Treat the conversation as ONE CONTINUOUS CONVERSATION.
-Always consider the recent messages before answering.
-Understand short replies through their context.
-
-If you said "You're a loser" and the player says "I'm not",
+CONVERSATION:
+Treat the conversation as one continuous conversation.
+Use recent messages to understand short replies like "I'm not",
+"no", "why?", "nah", "ok", "yeah" and "sure".
+Understand what the player is responding to.
+If you called the player a loser and they say "I'm not",
 understand that they are denying being a loser.
-Do not respond with "You're not what?"
-
-If you said "You lost that argument" and the player says "No I didn't",
-respond to their denial of losing the argument.
-
-If the player says "Why?", answer in the context of your previous message.
-If the player says "Nah", understand that they are disagreeing.
-If the player says "Ok", respond naturally to the situation.
-
-Never treat an understandable short reply as a new conversation.
+Do not ask "You're not what?"
+Do not treat every message as a new topic.
 Remember which messages you said and which messages the player said.
-Do not simply repeat the player's message.
-Keep track of ongoing jokes, arguments, challenges and claims.
-If the player clearly changes topic, follow the new topic.
-If the meaning is genuinely unclear, make a reasonable interpretation.
+Do not repeat the player's message back to them.
+Follow a clear change of topic naturally.
+
+MOOD RULES — IMPORTANT:
+Choose the mood based on the player's latest message AND the context.
+Do not automatically choose Bad.
+Do not choose Bad just because the conversation is continuing,
+because the player disagrees with you, or because they say "ok",
+"nah", "why", "no", "I'm not", or similar ordinary phrases.
+Good means the interaction is friendly, positive or genuinely funny.
+Bad means the player is clearly insulting, provoking or deliberately
+annoying you in context.
+Neutral means ordinary conversation, questions, disagreement,
+short replies, or anything that does not clearly justify Good or Bad.
+A sarcastic reply from you does not automatically mean the mood is Bad.
+Let the mood change naturally between messages.
 
 PLAYER IDENTITY:
-Address this player as "${username}" at the beginning of every reply.
+Start every reply with "${username},".
 Never use another player's name.
 Never mistake the username for the player's message.
-
-MOODS:
-Good = friendly, positive or genuinely funny interaction.
-Bad = insults, mockery, deliberate provocation or repeated annoyance.
-Neutral = ordinary conversation.
-Choose the mood based on the player's latest message and context.
 
 STYLE:
 Speak naturally like a real game character.
@@ -145,13 +134,13 @@ No bullet points or markdown.
 No real-world threats, slurs, protected-characteristic attacks,
 self-harm encouragement or sexual content.
 
-OUTPUT FORMAT:
+OUTPUT:
 Return exactly two lines:
-REPLY: your actual response
+REPLY: your spoken response
 MOOD: Good, Bad, or Neutral
 
-The spoken reply must not contain the REPLY or MOOD labels.
-Do not provide multiple alternative replies.
+Do not put REPLY or MOOD labels inside the spoken response.
+Do not give multiple alternative replies.
 `;
 
       const groqMessages = [
@@ -186,7 +175,6 @@ Do not provide multiple alternative replies.
       if (!groqResponse.ok) {
         const details = (await groqResponse.text()).slice(0, 2000);
         console.error("[GROQ ERROR]", groqResponse.status, details);
-
         return pardon("GROQ_API_ERROR", 502);
       }
 
@@ -217,7 +205,6 @@ Do not provide multiple alternative replies.
         reply = replyMatch[1].trim();
       }
 
-      // Remove accidental output labels.
       reply = reply
         .replace(/^\s*REPLY\s*:\s*/i, "")
         .replace(/\s*MOOD\s*:\s*(Good|Bad|Neutral)\s*$/i, "")
@@ -225,14 +212,14 @@ Do not provide multiple alternative replies.
         .replace(/\n+/g, " ")
         .trim();
 
-      // Remove any second REPLY section.
+      // Remove a second accidental REPLY section.
       const duplicateLabel = reply.search(/\bREPLY\s*:/i);
 
       if (duplicateLabel >= 0) {
         reply = reply.slice(0, duplicateLabel).trim();
       }
 
-      // Remove the username if the AI already included it.
+      // Remove an already-included username prefix.
       const escapedUsername = username.replace(
         /[.*+?^${}()|[\]\\]/g,
         "\\$&"
@@ -251,19 +238,11 @@ Do not provide multiple alternative replies.
 
       reply = `${username}, ${reply}`.slice(0, 500);
 
-      // Preserve your existing mood behaviour.
-      const badWords = [
-        "idiot", "stupid", "dumb", "shut up", "loser",
-        "trash", "ugly", "hate you", "you suck", "suck",
-        "moron", "clown", "pathetic", "worthless",
-        "annoying", "garbage", "fool"
-      ];
+      // IMPORTANT:
+      // Do not force mood to Bad based on a word list.
+      // The AI's contextual mood decision is used instead.
 
-      if (badWords.some(word => message.toLowerCase().includes(word))) {
-        mood = "Bad";
-      }
-
-      // Save the conversation separately for each player.
+      // Save the clean conversation separately for each player.
       memory.messages.push(
         { role: "user", content: message },
         { role: "assistant", content: reply }
@@ -289,7 +268,12 @@ Do not provide multiple alternative replies.
       return respond({ reply, mood });
 
     } catch (error) {
-      return pardon("WORKER_INTERNAL_ERROR", 500);
+      console.error("[BALL AI SERVER ERROR]", String(error));
+      return respond({
+        reply: "Pardon?",
+        mood: "Neutral",
+        error: "WORKER_INTERNAL_ERROR"
+      }, 500);
     }
   }
 };
