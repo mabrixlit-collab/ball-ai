@@ -326,7 +326,7 @@ Do not write multiple alternative replies.
       console.error("[BALL AI SERVER ERROR]", String(error));
 
       return respond({
-        reply: "My brain malfunctioned. Try again.",
+        reply: "Pardon?",
         mood: "Neutral",
         error: "WORKER_INTERNAL_ERROR"
       }, 500);
