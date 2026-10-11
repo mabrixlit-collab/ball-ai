@@ -21,27 +21,24 @@ export default {
     }
 
     if (request.method !== "POST") {
-      return respond({
-        reply: "Use POST.",
-        mood: "Neutral"
-      }, 405);
+      return respond({ reply: "Use POST.", mood: "Neutral" }, 405);
     }
 
     try {
       const data = await request.json();
 
       const playerId = String(data?.playerId || "unknown");
-      const username = String(data?.username || "").trim();
+      const username = String(data?.username || "").trim().slice(0, 20);
       const message = String(data?.message || "").trim().slice(0, 500);
 
       if (!message) {
         return respond({
-          reply: "You said absolutely nothing.",
+          reply: `${username || "Player"}, you said absolutely nothing.`,
           mood: "Neutral"
         });
       }
 
-      if (!username || username.length > 20) {
+      if (!username) {
         return respond({
           reply: "I can't figure out who's talking to me.",
           mood: "Neutral",
@@ -51,15 +48,14 @@ export default {
 
       if (!env.GROQ_API_KEY) {
         console.error("[CONFIG ERROR] GROQ_API_KEY is missing.");
-
         return respond({
-          reply: "My brain isn't connected.",
+          reply: `${username}, my brain isn't connected.`,
           mood: "Neutral",
           error: "MISSING_API_KEY"
         }, 500);
       }
 
-      // Keep each player's memory separate.
+      // Load this player's separate conversation memory.
       let memory = { messages: [] };
 
       if (env.BALL_MEMORY) {
@@ -77,77 +73,110 @@ export default {
         }
       }
 
-      // Limit prompt size so conversations don't grow endlessly.
+      // Keep recent exchanges together so the AI can follow the argument.
       const history = memory.messages
         .filter(item =>
           item &&
           ["user", "assistant"].includes(item.role) &&
           typeof item.content === "string"
         )
-        .slice(-12)
+        .slice(-20)
         .map(item => ({
           role: item.role,
           content: item.content.slice(0, 700)
         }));
 
-      const badWords = [
-        "idiot", "stupid", "dumb", "shut up", "loser",
-        "trash", "ugly", "hate you", "you suck", "suck",
-        "moron", "clown", "pathetic", "worthless",
-        "annoying", "garbage", "fool"
-      ];
-
-      const obviousBad = badWords.some(word =>
-        message.toLowerCase().includes(word)
-      );
-
       const systemPrompt = `
 You are a sarcastic, arrogant, clever talking ball in a multiplayer Roblox game.
 
-CURRENT PLAYER USERNAME: ${username}
+THE PLAYER YOU ARE TALKING TO:
+${username}
 
-PERSONALITY:
-You have a huge ego. You are witty, confident, competitive,
-unpredictable and difficult to impress.
-Tease the player and respond specifically to what they say.
-Notice repeated messages, contradictions and failed attempts to provoke you.
-Avoid repetitive catchphrases.
-Usually answer in one or two short sentences.
-Do not act like a normal helpful assistant.
+YOUR PERSONALITY:
+You have a huge ego. You are witty, confident, competitive, unpredictable,
+and difficult to impress. You enjoy playful arguments and clever comebacks.
+You can roast the player, but do not repeat the same joke constantly.
+You are a game character, not a helpful assistant.
+
+CRITICAL CONVERSATION RULES:
+You MUST understand the latest message using the conversation history.
+The history contains previous user messages and your own replies.
+Treat the conversation as ONE CONTINUOUS CONVERSATION, not separate questions.
+
+Short messages usually refer to something said immediately before them.
+Resolve what "it", "that", "you", "I'm not", "no", "why", "yeah",
+"nah", "ok", "sure" and similar expressions refer to by looking at
+the most recent relevant exchange.
+
+Example:
+You: "You're a loser."
+Player: "I'm not."
+Correct response: "mabrixlit, denying it doesn't make you any less of a loser."
+Incorrect response: "mabrixlit, you're not what?"
+
+Another example:
+You: "You clearly lost that argument."
+Player: "No I didn't."
+Respond to their denial of losing the argument. Do not ask what they mean.
+
+Another example:
+You: "You're scared to argue with me."
+Player: "Why?"
+Explain or tease them about being scared. Do not treat "why?" as a new topic.
+
+Another example:
+You: "That was the weakest comeback I've heard."
+Player: "Nah."
+React to their disagreement with your previous statement.
+
+IMPORTANT:
+- Never pretend a short reply is meaningless when the context makes it clear.
+- Never ask "what do you mean?" if recent messages explain the meaning.
+- Do not simply repeat the player's words back to them.
+- Respond to the meaning, intention, denial, challenge or emotion behind
+  their latest message.
+- Remember who said each line. Your previous replies are not the player's words.
+- If the player changes topic clearly, follow the new topic.
+- If the context is genuinely ambiguous, make a reasonable interpretation
+  rather than repeatedly asking for clarification.
+- Keep continuity with promises, insults, jokes, challenges and claims made
+  earlier in the conversation.
+- Do not claim to remember details that are absent from the available history.
 
 PLAYER IDENTITY:
-You are speaking to the player whose exact username is "${username}".
-Address that player by their username at the start of every reply.
-Never use another player's username.
-Never confuse the username with the player's message.
-Do not repeat the player's message.
+Address this player as "${username}" at the beginning of every reply.
+Never use another player's name. Never mistake their name for their message.
 
-MOODS:
+MOOD:
 Good = friendly, positive or genuinely funny interaction.
 Bad = insults, mockery, deliberate provocation or repeated annoyance.
 Neutral = ordinary conversation.
+Choose the mood based on the player's latest message and the conversation.
 
 STYLE:
-Speak naturally, like a real game character.
-No bullet points or dash-led sentences.
-No markdown.
+Use natural, short, game-style dialogue, usually one sentence.
+Be specific to what just happened in the conversation.
+No bullet points, markdown, or dash-led formatting.
 No real-world threats, slurs, protected-characteristic attacks,
 self-harm encouragement or sexual content.
 
-OUTPUT FORMAT:
+OUTPUT:
 Return exactly two lines:
-REPLY: your actual response
-MOOD: Good
+REPLY: [one natural reply]
+MOOD: [Good, Bad, or Neutral]
 
-The mood line must be Good, Bad, or Neutral.
-Never put REPLY or MOOD inside the actual response.
-Never repeat either label.
+The REPLY must contain only the actual spoken response.
+Never include the word REPLY or MOOD inside the spoken response.
+Do not write multiple alternative replies.
 `;
 
       const groqMessages = [
         { role: "system", content: systemPrompt },
         ...history,
-        { role: "user", content: message }
+        {
+          role: "user",
+          content: message
+        }
       ];
 
       let groqResponse;
@@ -173,7 +202,7 @@ Never repeat either label.
         console.error("[GROQ CONNECTION ERROR]", String(error));
 
         return respond({
-          reply: "My brain lost connection. Try again.",
+          reply: `${username}, my brain lost connection. Try again.`,
           mood: "Neutral",
           error: "GROQ_CONNECTION_ERROR"
         }, 502);
@@ -181,15 +210,10 @@ Never repeat either label.
 
       if (!groqResponse.ok) {
         const details = (await groqResponse.text()).slice(0, 2000);
-
-        console.error(
-          "[GROQ ERROR]",
-          groqResponse.status,
-          details
-        );
+        console.error("[GROQ ERROR]", groqResponse.status, details);
 
         return respond({
-          reply: "My brain is having trouble. Try again.",
+          reply: `${username}, my brain is having trouble. Try again.`,
           mood: "Neutral",
           error: "GROQ_API_ERROR",
           upstreamStatus: groqResponse.status
@@ -203,7 +227,7 @@ Never repeat either label.
         console.error("[EMPTY GROQ RESPONSE]", JSON.stringify(result));
 
         return respond({
-          reply: "My brain went blank. Try again.",
+          reply: `${username}, my brain went blank. Try again.`,
           mood: "Neutral",
           error: "EMPTY_GROQ_RESPONSE"
         }, 502);
@@ -217,8 +241,8 @@ Never repeat either label.
       );
 
       if (moodMatch) {
-        mood = moodMatch[1].toLowerCase();
-        mood = mood[0].toUpperCase() + mood.slice(1);
+        const value = moodMatch[1].toLowerCase();
+        mood = value.charAt(0).toUpperCase() + value.slice(1);
       }
 
       const replyMatch = reply.match(
@@ -229,37 +253,27 @@ Never repeat either label.
         reply = replyMatch[1].trim();
       }
 
-      // Strip accidental formatting labels.
       reply = reply
         .replace(/^\s*REPLY\s*:\s*/i, "")
         .replace(/\s*MOOD\s*:\s*(Good|Bad|Neutral)\s*$/i, "")
+        .replace(/\r/g, "")
+        .replace(/\n+/g, " ")
         .trim();
 
-      // Remove the player's message if the model echoes it.
-      const escapedMessage = message.replace(
+      // Remove a duplicated REPLY section if the model accidentally repeats it.
+      const duplicateLabel = reply.search(/\bREPLY\s*:/i);
+      if (duplicateLabel >= 0) {
+        reply = reply.slice(0, duplicateLabel).trim();
+      }
+
+      // Remove a duplicated username prefix.
+      const escapedUsername = username.replace(
         /[.*+?^${}()|[\]\\]/g,
         "\\$&"
       );
 
-      const echoedMessage = new RegExp(
-        "^\\s*" + escapedMessage + "\\s*:\\s*",
-        "i"
-      );
-
-      reply = reply.replace(echoedMessage, "").trim();
-
-      // Remove accidental dash formatting.
-      reply = reply
-        .replace(/\r/g, "")
-        .replace(/\n\s*[-*]\s+/g, " ")
-        .replace(/\s+[—–]\s+/g, ". ")
-        .replace(/\s+--\s+/g, ". ")
-        .trim();
-
-      // Ensure the actual Roblox username appears exactly once at the start.
       const usernamePrefix = new RegExp(
-        "^" + username.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") +
-        "\\s*[,!:—–-]*\\s*",
+        "^" + escapedUsername + "\\s*[,!:—–-]*\\s*",
         "i"
       );
 
@@ -271,11 +285,19 @@ Never repeat either label.
 
       reply = `${username}, ${reply}`.slice(0, 500);
 
-      if (obviousBad) {
+      // Keep your existing general insult-to-Bad behaviour.
+      const badWords = [
+        "idiot", "stupid", "dumb", "shut up", "loser",
+        "trash", "ugly", "hate you", "you suck", "suck",
+        "moron", "clown", "pathetic", "worthless",
+        "annoying", "garbage", "fool"
+      ];
+
+      if (badWords.some(word => message.toLowerCase().includes(word))) {
         mood = "Bad";
       }
 
-      // Save the clean conversation separately for each player.
+      // Save the actual exchange, without output-format labels.
       memory.messages.push(
         { role: "user", content: message },
         { role: "assistant", content: reply }
